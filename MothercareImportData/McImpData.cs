@@ -105,7 +105,7 @@ namespace MothercareImportData
                 var firstLineInUse = Convert.ToInt32(impparams.Current["FIRSTLINEINUSE"]);
                 var remarks = impparams.Current["COMMENTS"];
                 var sheetname = impparams.Current["SHEETNAME"];
-                var datatype = impparams.Current["DATATYPE"];
+                var datatype = Convert.ToInt32(impparams.Current["DATATYPE"] != DBNull.Value ? impparams.Current["DATATYPE"] : 0);
                 var filePath = Convert.ToString(impparams.Current["PATH"]);
                 var fileName = Path.GetFileName(filePath);
                 var numLinesToRemove = 0;
@@ -122,6 +122,7 @@ namespace MothercareImportData
                     numLinesToRemove = (firstLineInUse - 1);
                 }
                 var excelClient = new ExcelEditor();
+                excelClient.LoadFromFile(filePath);
                 logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου «{fileName}» ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 var excelData = new List<LiRow>();
 

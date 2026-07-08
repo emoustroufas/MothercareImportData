@@ -11,7 +11,7 @@ namespace MothercareImportData.Services
 {
     internal class ExcelFileService
     {
-        public static List<T>GetExcelData<T>(List<LiRow> rows, int firstLineInUse) where T : new()
+        public static List<T> GetExcelData<T>(List<LiRow> rows, int firstLineInUse) where T : new()
         {
             var i = firstLineInUse;
             var result = new List<T>();
@@ -297,7 +297,7 @@ namespace MothercareImportData.Services
                 }
             }
             else if (typeof(T) == typeof(TagRecord))
-            { 
+            {
                 foreach (var row in rows)
                 {
                     var tag = new TagRecord();
@@ -313,7 +313,7 @@ namespace MothercareImportData.Services
                     }
                 }
             }
-                return result;
+            return result;
         }
     }
 }
