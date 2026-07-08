@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37411.7 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MothercareImportData", "MothercareImportData\MothercareImportData.csproj", "{D4369C08-C1AA-4755-824E-78D791205565}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D4369C08-C1AA-4755-824E-78D791205565}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4369C08-C1AA-4755-824E-78D791205565}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4369C08-C1AA-4755-824E-78D791205565}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4369C08-C1AA-4755-824E-78D791205565}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DAD5C3EC-A3EB-4D46-8599-3034DD328CCA}
+	EndGlobalSection
+EndGlobal
