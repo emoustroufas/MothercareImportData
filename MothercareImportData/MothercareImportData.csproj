@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>d4369c08-c1aa-4755-824e-78d791205565</ProjectGuid>
+    <ProjectGuid>68452840-f443-424a-b288-79a443408530</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>MothercareImportData</RootNamespace>

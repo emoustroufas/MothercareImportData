@@ -1,10 +1,10 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\",
+  "WorkspaceRootPath": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{D4369C08-C1AA-4755-824E-78D791205565}|MothercareImportData\\MothercareImportData.csproj|c:\\users\\evangelos\\onedrive\\desktop\\projects\\mothercareimportdata\\mothercareimportdata\\mothercareimportdata\\class1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{D4369C08-C1AA-4755-824E-78D791205565}|MothercareImportData\\MothercareImportData.csproj|solutionrelative:mothercareimportdata\\class1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|c:\\users\\evangelos\\onedrive\\desktop\\projects\\mothercareimportdata\\mothercareimportdata\\class1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|solutionrelative:mothercareimportdata\\class1.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -20,13 +20,13 @@
               "$type": "Document",
               "DocumentIndex": 0,
               "Title": "Class1.cs",
-              "DocumentMoniker": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\MothercareImportData\\Class1.cs",
+              "DocumentMoniker": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Class1.cs",
               "RelativeDocumentMoniker": "MothercareImportData\\Class1.cs",
-              "ToolTip": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\MothercareImportData\\Class1.cs",
+              "ToolTip": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Class1.cs",
               "RelativeToolTip": "MothercareImportData\\Class1.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-07-08T08:35:10.129Z",
+              "WhenOpened": "2026-07-08T09:02:35.116Z",
               "EditorCaption": ""
             }
           ]
