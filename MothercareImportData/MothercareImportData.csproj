@@ -131,6 +131,7 @@
     <Compile Include="Models\ItemTypeRecord.cs" />
     <Compile Include="Models\LiRow.cs" />
     <Compile Include="Models\SimilarItemRecord.cs" />
+    <Compile Include="Models\SqlData.cs" />
     <Compile Include="Models\StatusRecord.cs" />
     <Compile Include="Models\SubdepartmentRecord.cs" />
     <Compile Include="Models\TagRecord.cs" />
@@ -139,6 +140,7 @@
     <Compile Include="Services\ExcelEditor.cs" />
     <Compile Include="Services\ExcelFileService.cs" />
     <Compile Include="Services\ExcelSheetReader.cs" />
+    <Compile Include="Services\SoftoneService.cs" />
     <Compile Include="Services\SoftoneTools.cs" />
     <Compile Include="Utils\FileUtil.cs" />
   </ItemGroup>

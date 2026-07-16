@@ -15,6 +15,27 @@ namespace MothercareImportData
     [WorksOn("CCCVMCIMPDATA")]
     public class McImpData:TXCode
     {
+        //SQL Data
+        private List<SqlData> sqlData;
+        private List<SqlData> item_list;
+        private List<SqlData> theme_list;
+        private List<SqlData> division_list;
+        private List<SqlData> department_list;
+        private List<SqlData> subdepartment_list;
+        private List<SqlData> class_list;
+        private List<SqlData> size_list;
+        private List<SqlData> color_list;
+        private List<SqlData> brand_list;
+        private List<SqlData> intrastat_list;
+        private List<SqlData> season_list;
+        private List<SqlData> collection_list;
+        private List<SqlData> vat_list;
+        private List<SqlData> busunit_list;
+        private List<SqlData> itemtype_list;
+        private List<SqlData> accountingtype_list;
+        private List<SqlData> country_list;
+        private List<SqlData> supplier_list;
+        //Excel Data
         private List<ItemMasterRecord> items;
         private List<BarcodeRecord> barcodes;
         private List<DivisionRecord> divisions;
@@ -34,8 +55,31 @@ namespace MothercareImportData
         private List<TagRecord> tags;
         public override void Initialize()
         {
-            var softonetools = new SoftoneTools();
             XModule.SetEvent("ON_CCCVMCIMPPARAMS_PATH", On_CccVMCImpParams_Path);
+            var softoneTools = new SoftoneTools();
+            var softoneService = new SoftoneService(XSupport);
+            var sqlData = softoneService.GetSqlData();
+            if (sqlData.Count > 0)
+            {
+                item_list = sqlData.Where(x => x.Obj == "item").ToList();
+                theme_list = sqlData.Where(x => x.Obj == "theme").ToList();
+                division_list = sqlData.Where(x => x.Obj == "division").ToList();
+                department_list = sqlData.Where(x => x.Obj == "department").ToList();
+                subdepartment_list = sqlData.Where(x => x.Obj == "subdepartment").ToList();
+                class_list = sqlData.Where(x => x.Obj == "class").ToList();
+                size_list = sqlData.Where(x => x.Obj == "size").ToList();
+                color_list = sqlData.Where(x => x.Obj == "color").ToList();
+                brand_list = sqlData.Where(x => x.Obj == "brand").ToList();
+                intrastat_list = sqlData.Where(x => x.Obj == "intrastat").ToList();
+                season_list = sqlData.Where(x => x.Obj == "season").ToList();
+                collection_list = sqlData.Where(x => x.Obj == "collection").ToList();
+                vat_list = sqlData.Where(x => x.Obj == "vat").ToList();
+                busunit_list = sqlData.Where(x => x.Obj == "busunit").ToList();
+                itemtype_list = sqlData.Where(x => x.Obj == "itemtype").ToList();
+                accountingtype_list = sqlData.Where(x => x.Obj == "accountingtype").ToList();
+                country_list = sqlData.Where(x => x.Obj == "country").ToList();
+                supplier_list = sqlData.Where(x => x.Obj == "supplier").ToList();
+            }
             base.Initialize();
         }
         private void On_CccVMCImpParams_Path(object Sender, XEventArgs e)//Επιλογή αρχείου και έλεγχος ορθότητας path.
@@ -125,96 +169,170 @@ namespace MothercareImportData
                 excelClient.LoadFromFile(filePath);
                 logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου «{fileName}» ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 var excelData = new List<LiRow>();
+                var softoneService = new SoftoneService(XSupport);
 
                 switch (datatype)
                 {
-                    case 1:
-                        excelData = excelClient.ExportExcelData("Αρχείο Ειδών");
-                        excelData.RemoveRange(0, numLinesToRemove);
-                        items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
-                        break;  
-                    case 2:
-                        excelData = excelClient.ExportExcelData("barcode");
-                        excelData.RemoveRange(0, numLinesToRemove);
-                        barcodes = ExcelFileService.GetExcelData<BarcodeRecord>(excelData, firstLineInUse);
-                        break;
+                    //case 1:
+                    //    excelData = excelClient.ExportExcelData("Αρχείο Ειδών");
+                    //    excelData.RemoveRange(0, numLinesToRemove);
+                    //    items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
+                    //    break;  
+                    //case 2:
+                    //    excelData = excelClient.ExportExcelData("barcode");
+                    //    excelData.RemoveRange(0, numLinesToRemove);
+                    //    barcodes = ExcelFileService.GetExcelData<BarcodeRecord>(excelData, firstLineInUse);
+                    //    break;
                     case 3:
                         excelData = excelClient.ExportExcelData("division");
                         excelData.RemoveRange(0, numLinesToRemove);
                         divisions = ExcelFileService.GetExcelData<DivisionRecord>(excelData, firstLineInUse);
+                        if (divisions.Count > 0)
+                        {
+                            var differences = divisions.Where(d => !division_list.Any(s => s.Code == d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateDivision(differences);
+                            }
+                        }
                         break;
                     case 4:
                         excelData = excelClient.ExportExcelData("Department");
                         excelData.RemoveRange(0, numLinesToRemove);
                         departments = ExcelFileService.GetExcelData<DepartmentRecord>(excelData, firstLineInUse);
+                        if (departments.Count > 0)
+                        {
+                            var differences = departments.Where(d => !department_list.Any(s => s.Code == d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateDepartment(differences);
+                            }
+                        }
                         break;
                     case 5:
                         excelData = excelClient.ExportExcelData("Subdepartment");
                         excelData.RemoveRange(0, numLinesToRemove);
                         subdepartments = ExcelFileService.GetExcelData<SubdepartmentRecord>(excelData, firstLineInUse);
+                        if (subdepartments.Count > 0)
+                        {
+                            var differences = subdepartments.Where(d => !subdepartment_list.Any(s => s.Code == d.DepartmentCode + "-" + d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateSubdepartment(differences);
+                            }
+                        }
                         break;
                     case 6:
                         excelData = excelClient.ExportExcelData("Clas");
                         excelData.RemoveRange(0, numLinesToRemove);
                         classes = ExcelFileService.GetExcelData<ClassRecord>(excelData, firstLineInUse);
+                        if (classes.Count > 0)
+                        {
+                            var differences = classes.Where(d => !class_list.Any(s => s.Code == d.DepartmentCode + "-" + d.SubdeptCode + "-" + d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateClass(differences);
+                            }
+                        }
                         break;
                     case 7:
                         excelData = excelClient.ExportExcelData("Brand");
                         excelData.RemoveRange(0, numLinesToRemove);
                         brands = ExcelFileService.GetExcelData<BrandRecord>(excelData, firstLineInUse);
+                        if (brands.Count>0)
+                        {
+                            var differences = brands.Where(d => !brand_list.Any(s => s.Code == "MC" + d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateBrand(differences);
+                            }
+                        }
                         break;
                     case 8:
-                        excelData = excelClient.ExportExcelData("Συλλογή");
+                        excelData = excelClient.ExportExcelData("Συλλογή"); // th 1268 prepein na thn aferesoume apo thn bash
                         excelData.RemoveRange(0, numLinesToRemove);
                         collections = ExcelFileService.GetExcelData<CollectionRecord>(excelData, firstLineInUse);
+                        if (collections.Count > 0)
+                        {
+                            var differences = collections.Where(d => !collection_list.Any(s => s.Code == d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateCollection(differences);
+                            }
+                        }
                         break;
-                    case 9:
-                        excelData = excelClient.ExportExcelData("Εμπορική Συλλογή");
-                        excelData.RemoveRange(0, numLinesToRemove);
-                        commercialCollections = ExcelFileService.GetExcelData<CommercialCollectionRecord>(excelData, firstLineInUse);
-                        break;
+                    //case 9:
+                    //    excelData = excelClient.ExportExcelData("Εμπορική Συλλογή");
+                    //    excelData.RemoveRange(0, numLinesToRemove);
+                    //    commercialCollections = ExcelFileService.GetExcelData<CommercialCollectionRecord>(excelData, firstLineInUse);
+                    //    break;
                     case 10:
                         excelData = excelClient.ExportExcelData("BU");
                         excelData.RemoveRange(0, numLinesToRemove);
                         businessUnits = ExcelFileService.GetExcelData<BuRecord>(excelData, firstLineInUse);
+                        if (businessUnits.Count > 0)
+                        {
+                            var differences = businessUnits.Where(d => !busunit_list.Any(s => s.Code == "MC" + d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateBusinessUnit(differences);
+                            }
+                        }
                         break;
                     case 11:
                         excelData = excelClient.ExportExcelData("τύπος είδους");
                         excelData.RemoveRange(0, numLinesToRemove);
                         itemTypes = ExcelFileService.GetExcelData<ItemTypeRecord>(excelData, firstLineInUse);
+                        if (itemTypes.Count > 0)
+                        {
+                            var differences = itemTypes.Where(d => !itemtype_list.Any(s => s.Code == "MC" + d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateItemType(differences);
+                            }
+                        }
                         break;
-                    case 12:
-                        excelData = excelClient.ExportExcelData("status");
-                        excelData.RemoveRange(0, numLinesToRemove);
-                        statuses = ExcelFileService.GetExcelData<StatusRecord>(excelData, firstLineInUse);
-                        break;
+                    //case 12:
+                    //    excelData = excelClient.ExportExcelData("status");
+                    //    excelData.RemoveRange(0, numLinesToRemove);
+                    //    statuses = ExcelFileService.GetExcelData<StatusRecord>(excelData, firstLineInUse);
+                    //    break;
                     case 13:
                         excelData = excelClient.ExportExcelData("τύπος για λογιστική");
                         excelData.RemoveRange(0, numLinesToRemove);
                         accountingTypes = ExcelFileService.GetExcelData<AccountingTypeRecord>(excelData, firstLineInUse);
+                        if(accountingTypes.Count > 0)
+                            {
+                            var differences = accountingTypes.Where(d => !accountingtype_list.Any(s => s.Code == "MC" + d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateAccountingType(differences);
+                            }
+                        }
                         break;
-                    case 14:
-                        excelData = excelClient.ExportExcelData("όμοια είδη");
-                        excelData.RemoveRange(0, numLinesToRemove);
-                        similarItems = ExcelFileService.GetExcelData<SimilarItemRecord>(excelData, firstLineInUse);
-                        break;
-                    case 15:
-                        excelData = excelClient.ExportExcelData("add ons");
-                        excelData.RemoveRange(0, numLinesToRemove);
-                        addOns = ExcelFileService.GetExcelData<AddOnRecord>(excelData, firstLineInUse);
-                        break;
-                    case 16:
-                        excelData = excelClient.ExportExcelData("attributes");
-                        excelData.RemoveRange(0, numLinesToRemove);
-                        attributes = ExcelFileService.GetExcelData<AttributeRecord>(excelData, firstLineInUse);
-                        break;
-                    case 17:
-                        excelData = excelClient.ExportExcelData("tags");
-                        excelData.RemoveRange(0, numLinesToRemove);
-                        tags = ExcelFileService.GetExcelData<TagRecord>(excelData, firstLineInUse);
+                    //case 14:
+                    //    excelData = excelClient.ExportExcelData("όμοια είδη");
+                    //    excelData.RemoveRange(0, numLinesToRemove);
+                    //    similarItems = ExcelFileService.GetExcelData<SimilarItemRecord>(excelData, firstLineInUse);
+                    //    break;
+                    //case 15:
+                    //    excelData = excelClient.ExportExcelData("add ons");
+                    //    excelData.RemoveRange(0, numLinesToRemove);
+                    //    addOns = ExcelFileService.GetExcelData<AddOnRecord>(excelData, firstLineInUse);
+                    //    break;
+                    //case 16:
+                    //    excelData = excelClient.ExportExcelData("attributes");
+                    //    excelData.RemoveRange(0, numLinesToRemove);
+                    //    attributes = ExcelFileService.GetExcelData<AttributeRecord>(excelData, firstLineInUse);
+                    //    break;
+                    //case 17:
+                    //    excelData = excelClient.ExportExcelData("tags");
+                    //    excelData.RemoveRange(0, numLinesToRemove);
+                    //    tags = ExcelFileService.GetExcelData<TagRecord>(excelData, firstLineInUse);
                         break;
                 }
-
+                XSupport.Warning("Τέλος Εργασίας!");
+                XModule.CloseForm();
             }
             catch (Exception ex)
             {
