@@ -58,7 +58,7 @@ namespace MothercareImportData
             XModule.SetEvent("ON_CCCVMCIMPPARAMS_PATH", On_CccVMCImpParams_Path);
             var softoneTools = new SoftoneTools();
             var softoneService = new SoftoneService(XSupport);
-            var sqlData = softoneService.GetSqlData();
+            sqlData = softoneService.GetSqlData();
             if (sqlData.Count > 0)
             {
                 item_list = sqlData.Where(x => x.Obj == "item").ToList();
@@ -173,11 +173,35 @@ namespace MothercareImportData
 
                 switch (datatype)
                 {
-                    //case 1:
-                    //    excelData = excelClient.ExportExcelData("Αρχείο Ειδών");
-                    //    excelData.RemoveRange(0, numLinesToRemove);
-                    //    items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
-                    //    break;  
+                    case 1:
+                        excelData = excelClient.ExportExcelData("Αρχείο Ειδών");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
+                        if (items.Count > 0)
+                        {
+                            //sqlData = softoneService.GetSqlData();
+                            // Πρεπει να δημιουργούνται τα Intrastat, Size, Color, House, Vat, Supplier, Themes πριν τα Items
+                            var intrastats = items.Select(i => i.Intrastat).Distinct().ToList();
+                            if (intrastats.Count > 0)
+                            {
+                                var differences = intrastats.Where(d => !intrastat_list.Any(s => s.Code == d)).ToList();
+                                if (differences.Count > 0)
+                                {
+                                    softoneService.CreateIntrastat(differences);
+                                }
+                            }
+                            var themes = items.Select(i => i.StyleNo).Distinct().ToList();
+                            if (themes.Count > 0)
+                            {
+                                var differences = themes.Where(d => !theme_list.Any(s => s.Name == d)).ToList();
+                                if (differences.Count > 0)
+                                {
+                                    softoneService.CreateTheme(differences);
+                                }
+                            }
+                            softoneService.CreateUpdateItems(items, sqlData);
+                        }
+                        break;
                     //case 2:
                     //    excelData = excelClient.ExportExcelData("barcode");
                     //    excelData.RemoveRange(0, numLinesToRemove);
@@ -239,7 +263,7 @@ namespace MothercareImportData
                         excelData = excelClient.ExportExcelData("Brand");
                         excelData.RemoveRange(0, numLinesToRemove);
                         brands = ExcelFileService.GetExcelData<BrandRecord>(excelData, firstLineInUse);
-                        if (brands.Count>0)
+                        if (brands.Count > 0)
                         {
                             var differences = brands.Where(d => !brand_list.Any(s => s.Code == "MC" + d.Code)).ToList();
                             if (differences.Count > 0)
@@ -301,8 +325,8 @@ namespace MothercareImportData
                         excelData = excelClient.ExportExcelData("τύπος για λογιστική");
                         excelData.RemoveRange(0, numLinesToRemove);
                         accountingTypes = ExcelFileService.GetExcelData<AccountingTypeRecord>(excelData, firstLineInUse);
-                        if(accountingTypes.Count > 0)
-                            {
+                        if (accountingTypes.Count > 0)
+                        {
                             var differences = accountingTypes.Where(d => !accountingtype_list.Any(s => s.Code == "MC" + d.Code)).ToList();
                             if (differences.Count > 0)
                             {
@@ -329,7 +353,7 @@ namespace MothercareImportData
                     //    excelData = excelClient.ExportExcelData("tags");
                     //    excelData.RemoveRange(0, numLinesToRemove);
                     //    tags = ExcelFileService.GetExcelData<TagRecord>(excelData, firstLineInUse);
-                        break;
+                    //break;
                 }
                 XSupport.Warning("Τέλος Εργασίας!");
                 XModule.CloseForm();
