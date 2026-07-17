@@ -179,7 +179,7 @@ namespace MothercareImportData
                         items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
                         if (items.Count > 0)
                         {
-                            //sqlData = softoneService.GetSqlData();
+                            var newdata = false;
                             // Πρεπει να δημιουργούνται τα Intrastat, Size, Color, House, Vat, Supplier, Themes πριν τα Items
                             var intrastats = items.Select(i => i.Intrastat).Distinct().ToList();
                             if (intrastats.Count > 0)
@@ -187,6 +187,7 @@ namespace MothercareImportData
                                 var differences = intrastats.Where(d => !intrastat_list.Any(s => s.Code == d)).ToList();
                                 if (differences.Count > 0)
                                 {
+                                    newdata = true;
                                     softoneService.CreateIntrastat(differences);
                                 }
                             }
@@ -196,17 +197,34 @@ namespace MothercareImportData
                                 var differences = themes.Where(d => !theme_list.Any(s => s.Name == d)).ToList();
                                 if (differences.Count > 0)
                                 {
+                                    newdata = true;
                                     softoneService.CreateTheme(differences);
                                 }
+                            }
+                            if (newdata)
+                            {
+                                sqlData = softoneService.GetSqlData();
                             }
                             softoneService.CreateUpdateItems(items, sqlData);
                         }
                         break;
-                    //case 2:
-                    //    excelData = excelClient.ExportExcelData("barcode");
-                    //    excelData.RemoveRange(0, numLinesToRemove);
-                    //    barcodes = ExcelFileService.GetExcelData<BarcodeRecord>(excelData, firstLineInUse);
-                    //    break;
+                    case 2:
+                        excelData = excelClient.ExportExcelData("barcode");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        barcodes = ExcelFileService.GetExcelData<BarcodeRecord>(excelData, firstLineInUse);
+                        if (barcodes.Count > 0)
+                        {
+                            var itemCodesSet = new HashSet<string>(item_list.Select(s => s.Code));
+                            var existingItemCodes = barcodes
+                                .Where(d => itemCodesSet.Contains(d.ItemCode))
+                                .ToList();
+                            //var test = existingItemCodes.Select(x => x.ItemCode).Distinct().ToList();
+                            if (existingItemCodes.Count > 0)
+                            {
+                                softoneService.ImportBarcode(existingItemCodes,item_list);
+                            }
+                        }
+                        break;
                     case 3:
                         excelData = excelClient.ExportExcelData("division");
                         excelData.RemoveRange(0, numLinesToRemove);

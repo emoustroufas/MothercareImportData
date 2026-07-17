@@ -32,10 +32,10 @@ namespace MothercareImportData.Models
         public int House { get; set; } //Οίκος
         public int VatCategory { get; set; } //Vat category
         public int Phase { get; set; } //Φάση
-        public string Seasonality { get; set; } //Εποχικότητα
+        public int Seasonality { get; set; } //Εποχικότητα
         public int ListUp { get; set; } //ListUp
-        public int Outlet { get; set; } //OUTLET
-        public float NetWeight { get; set; } //Καθαρό βάρος
+        public DateTime Outlet { get; set; } //OUTLET
+        public double NetWeight { get; set; } //Καθαρό βάρος
         public string CountryOfOrigin { get; set; } //COO
         public string Intrastat { get; set; } //Intrastat
         public int Status { get; set; } //Status
@@ -48,10 +48,10 @@ namespace MothercareImportData.Models
         public int RestockWithPackage { get; set; } //Ανεφοδιασμός με συσκευασία
         public int WarrantyMonths { get; set; } //μήνες εγγύησης
         public string EshopMasterCode { get; set; } //Κωδ. master για e-shop
-        public float Height { get; set; } //HEIGHT
-        public float Length { get; set; } //LENGTH
-        public float Width { get; set; } //WIDTH
-        public float ItemCubeM { get; set; } //ITEMCUBEM
+        public double Height { get; set; } //HEIGHT
+        public double Length { get; set; } //LENGTH
+        public double Width { get; set; } //WIDTH
+        public double ItemCubeM { get; set; } //ITEMCUBEM
         public string PhotoName { get; set; } //Όνομα φωτογραφίας
         public int WorkInProgressInGr { get; set; } //WORK_IN_PROGRESS_IN_GR
         public int ToBePublishedInGr { get; set; } //TO_BE_PUBLISHED_IN_GR
