@@ -16,4 +16,15 @@ namespace MothercareImportData.Models
         public string Attribute1Description { get; set; }//AP_ATTR1_PERI
         public string FreeText { get; set; }//FREE_TEXT
     }
+    public class AttributeDifference
+    {
+        public string ItemCode { get; set; }
+        public int ExcelLanguageCode { get; set; }
+        public string Attribute0Code { get; set; }
+        public string Attribute1Code { get; set; }
+        public string Field { get; set; }      // π.χ. "Attribute0Description", "Attribute1Description"
+        public string ExcelValue { get; set; }
+        public string SqlValue { get; set; }
+        public string Reason { get; set; }     // "Mismatch" | "MissingInSql" | "MissingInExcel"
+    }
 }

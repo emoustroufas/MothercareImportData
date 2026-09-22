@@ -111,14 +111,16 @@ namespace MothercareImportData.Services
 
         static ExcelSheetReader()
         {
-            CellConverters = new Dictionary<Type, Func<ICell, object>>();
-            CellConverters.Add(typeof(string), cell => GetCellAsString(cell));
-            CellConverters.Add(typeof(int), cell => (int)GetCellAsDouble(cell));
-            CellConverters.Add(typeof(long), cell => (long)GetCellAsDouble(cell));
-            CellConverters.Add(typeof(decimal), cell => (decimal)GetCellAsDouble(cell));
-            CellConverters.Add(typeof(double), cell => GetCellAsDouble(cell));
-            CellConverters.Add(typeof(bool), cell => GetCellAsBool(cell));
-            CellConverters.Add(typeof(DateTime), cell => GetCellAsDateTime(cell));
+            CellConverters = new Dictionary<Type, Func<ICell, object>>
+            {
+                { typeof(string), cell => GetCellAsString(cell) },
+                { typeof(int), cell => (int)GetCellAsDouble(cell) },
+                { typeof(long), cell => (long)GetCellAsDouble(cell) },
+                { typeof(decimal), cell => (decimal)GetCellAsDouble(cell) },
+                { typeof(double), cell => GetCellAsDouble(cell) },
+                { typeof(bool), cell => GetCellAsBool(cell) },
+                { typeof(DateTime), cell => GetCellAsDateTime(cell) }
+            };
         }
 
         private static void SetPropertyValue(object target, PropertyInfo property, ICell cell)

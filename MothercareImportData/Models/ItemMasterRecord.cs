@@ -15,7 +15,7 @@ namespace MothercareImportData.Models
         public string SupplierCode { get; set; } //Κωδικός προμηθευτή
         public string EnglishDescription { get; set; } //Αγγλικη περιγραφή
         public string Comments { get; set; } //Σχόλια
-        public string UnitOfMeasure { get; set; } //Μονάδα μέτρησης
+        public int UnitOfMeasure { get; set; } //Μονάδα μέτρησης
         public int PackageQuantity { get; set; } //Τεμάχια συσκευασίας
         public int ComposedOfQuantity { get; set; } //Από πόσα τεμάχια αποτελείται
         public int Division { get; set; } //Division
@@ -26,6 +26,7 @@ namespace MothercareImportData.Models
         public int Season { get; set; } //Εποχή
         public int StatisticalYear { get; set; } //Στατιστικό έτος
         public string StyleNo { get; set; } //Style No
+        public int SizeGuide { get; set; } //Μεγεθολόγιο
         public string Size { get; set; } //Size
         public string Color { get; set; } //Color
         public int Brand { get; set; } //Brand
@@ -59,5 +60,6 @@ namespace MothercareImportData.Models
         public int HasTranslation { get; set; } //HAS_TRANSLATION
         public int IsPublishedInGr { get; set; } //IS_PUBLISHED_IN_GR
         public int ToBePublishedInSkroutz { get; set; } //TO_BE_PUBLISHED_IN_SKROUTZ
+        public int ToBePublishedInPublic { get; set; } //TO_BE_PUBLISHED_IN_PUBLIC
     }
 }

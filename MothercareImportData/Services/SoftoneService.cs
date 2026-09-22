@@ -1,6 +1,10 @@
 ﻿using MothercareImportData.Models;
+using NPOI.HSSF.Record;
+using Org.BouncyCastle.Asn1.Cms;
+using SixLabors.ImageSharp;
 using Softone;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -34,8 +38,13 @@ namespace MothercareImportData.Services
                             UNION ALL SELECT 'itemtype' AS OBJ, MTRCATEGORY AS ID, CODE, NAME FROM MTRCATEGORY WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}  AND SODTYPE = 51
                             UNION ALL SELECT 'accountingtype' AS OBJ, MTRACN AS ID, CODE, NAME FROM MTRACN WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}  AND SODTYPE = 51
                             UNION ALL SELECT 'country' AS OBJ, COUNTRY AS ID, SHORTCUT AS CODE, NAME FROM COUNTRY WHERE ISACTIVE = 1 
-                            UNION ALL SELECT 'item' AS OBJ, MTRL AS ID, CODE, NAME FROM MTRL WHERE /*ISACTIVE = 1 AND*/ COMPANY = {_xSupport.ConnectionInfo.CompanyId}  AND SODTYPE = 51 AND ISNULL(CCCITEMCOMPANY,0)=2
-                            UNION ALL SELECT 'supplier' AS OBJ, TRDR AS ID, CODE, NAME FROM TRDR WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId} AND SODTYPE=12";
+                            UNION ALL SELECT 'item' AS OBJ, MTRL AS ID, CODE, NAME FROM MTRL WHERE COMPANY = {_xSupport.ConnectionInfo.CompanyId}  AND SODTYPE = 51 AND ISNULL(CCCITEMCOMPANY,0) IN (0,2)
+                            UNION ALL SELECT 'supplier' AS OBJ, TRDR AS ID, CODE, NAME FROM TRDR WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId} AND SODTYPE=12
+                            UNION ALL SELECT 'sizeguide' AS OBJ, CCCSIZEGUIDE AS ID, CODE, NAME FROM CCCSIZEGUIDE WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}
+                            UNION ALL SELECT 'seasonality' AS OBJ, CCCSEASONALITY AS ID, CODE, NAME FROM CCCSEASONALITY WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}
+                            UNION ALL SELECT 'house' AS OBJ, CCCHOUSE AS ID, CODE, NAME FROM CCCHOUSE WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}
+                            UNION ALL SELECT 'commercialcollection' AS OBJ, CCCCOMMERCIALCOLLECTION AS ID, CODE, NAME FROM CCCCOMMERCIALCOLLECTION WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}
+                            ";
             using (var ds = _xSupport.GetSQLDataSet(query, null))
             {
                 try
@@ -60,6 +69,211 @@ namespace MothercareImportData.Services
                 {
                     return sqldata;
                     throw new Exception(ex.Message);
+                }
+            }
+        }
+        public List<SqlAttributeData> GetSqlAttributeData()
+        {
+            var sqldata = new List<SqlAttributeData>();
+            var query = $@"SELECT 'attributes' AS OBJ,
+                            1 /*'GR'*/ AS LANGUAGE , A.MTRATTRIBUTE AS ID,A.CODE,A.NAME,
+                            CASE WHEN ISNULL(C.INTERCODE,'')='GB' THEN 2 ELSE NULL END AS TRANS_LANGUAGE, ISNULL(B.TRANSLATION,'') AS TRANSLATION, 
+                            D.MTRATTRIBUTELN AS ID_LINE,D.CODE AS CODE_LINE,D.SOVALUE AS NAME_LINE,ISNULL(E.TRANSLATION,'') AS TRANSLATION_LINE
+                            FROM MTRATTRIBUTE A
+                            LEFT JOIN CCCATTIBUTETRANSLATION B ON B.MTRATTRIBUTE=A.MTRATTRIBUTE AND B.DATATYPE=1
+                            LEFT JOIN COUNTRY C ON C.COUNTRY=B.COUNTRY
+                            LEFT JOIN MTRATTRIBUTELN D ON D.MTRATTRIBUTE=A.MTRATTRIBUTE
+                            LEFT JOIN CCCATTIBUTETRANSLATION E ON D.MTRATTRIBUTE=E.MTRATTRIBUTE AND E.MTRATTRIBUTELN=D.MTRATTRIBUTELN AND E.DATATYPE=2 AND E.COUNTRY=B.COUNTRY
+                            WHERE A.ISACTIVE = 1 AND A.COMPANY={_xSupport.ConnectionInfo.CompanyId}";
+            using (var ds = _xSupport.GetSQLDataSet(query, null))
+            {
+                try
+                {
+                    if (ds.Count > 0)
+                    {
+                        for (int i = 0; i < ds.Count; i++)
+                        {
+                            var res = new SqlAttributeData
+                            {
+                                LanguageCode = ds.GetAsInteger(i, "LANGUAGE"),
+                                Id = ds.GetAsInteger(i, "ID"),
+                                Code = ds.GetAsString(i, "CODE"),
+                                Description = ds.GetAsString(i, "NAME"),
+                                LanguageCode_Translation = ds.GetAsInteger(i, "TRANS_LANGUAGE"),
+                                Description_Translation = ds.GetAsString(i, "TRANSLATION"),
+                                Line_Id = ds.GetAsInteger(i, "ID_LINE"),
+                                Line_Code = ds.GetAsString(i, "CODE_LINE"),
+                                Line_Description = ds.GetAsString(i, "NAME_LINE"),
+                                Line_DescriptionTranslation = ds.GetAsString(i, "TRANSLATION_LINE")
+                            };
+                            sqldata.Add(res);
+                        }
+                    }
+                    return sqldata;
+                }
+                catch (Exception ex)
+                {
+                    return sqldata;
+                    throw new Exception(ex.Message);
+                }
+            }
+        }
+        public void CreateSizeGuide(List<SizeGuideRecord> exceldata)
+        {
+            if (exceldata.Count() > 0)
+            {
+                try
+                {
+                    foreach (var exd in exceldata)
+                    {
+                        var exdcode = exd.Code;
+                        var exdname = exd.Description;
+                        try
+                        {
+                            using (var ImpObj = _xSupport.CreateModule("CCCSIZEGUIDE"))
+                            {
+                                ImpObj.InsertData();
+                                ImpObj.GetTable("CCCSIZEGUIDE").Current["CODE"] = exdcode.ToString();
+                                ImpObj.GetTable("CCCSIZEGUIDE").Current["NAME"] = exdname.Replace("'", "");
+                                ImpObj.GetTable("CCCSIZEGUIDE").Current["ISACTIVE"] = 1;
+                                ImpObj.PostData();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _xSupport.Exception($"Πρόβλημα στο Μεγεθολόγιο «{exdname}»." + ex.Message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _xSupport.Exception(ex.Message);
+                }
+            }
+        }
+        public void CreateSeasonality(List<SeasonalityRecord> exceldata)
+        {
+            if (exceldata.Count() > 0)
+            {
+                try
+                {
+                    foreach (var exd in exceldata)
+                    {
+                        var exdcode = exd.Code;
+                        var exdname = exd.Description;
+                        try
+                        {
+                            using (var ImpObj = _xSupport.CreateModule("CCCSEASONALITY"))
+                            {
+                                ImpObj.InsertData();
+                                ImpObj.GetTable("CCCSEASONALITY").Current["CODE"] = exdcode.ToString();
+                                ImpObj.GetTable("CCCSEASONALITY").Current["NAME"] = exdname.Replace("'", "");
+                                ImpObj.GetTable("CCCSEASONALITY").Current["ISACTIVE"] = 1;
+                                ImpObj.PostData();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _xSupport.Exception($"Πρόβλημα στη Εποχικότητα «{exdname}»." + ex.Message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _xSupport.Exception(ex.Message);
+                }
+            }
+        }
+        public void CreateHouse(List<HouseRecord> exceldata)
+        {
+            if (exceldata.Count() > 0)
+            {
+                try
+                {
+                    foreach (var exd in exceldata)
+                    {
+                        var exdcode = exd.Code;
+                        var exdname = exd.Description;
+                        try
+                        {
+                            using (var ImpObj = _xSupport.CreateModule("CCCHOUSE"))
+                            {
+                                ImpObj.InsertData();
+                                ImpObj.GetTable("CCCHOUSE").Current["CODE"] = exdcode.ToString();
+                                ImpObj.GetTable("CCCHOUSE").Current["NAME"] = exdname.Replace("'", "");
+                                ImpObj.GetTable("CCCHOUSE").Current["ISACTIVE"] = 1;
+                                ImpObj.PostData();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _xSupport.Exception($"Πρόβλημα στον Οίκο «{exdname}»." + ex.Message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _xSupport.Exception(ex.Message);
+                }
+            }
+        }
+        public void CreateCommercialCollection(List<CommercialCollectionRecord> exceldata)
+        {
+            if (exceldata.Count() > 0)
+            {
+                try
+                {
+                    foreach (var exd in exceldata)
+                    {
+                        var exdcode = exd.Code;
+                        var exdname = exd.Description;
+                        try
+                        {
+                            using (var ImpObj = _xSupport.CreateModule("CCCCOMMERCIALCOLLECTION"))
+                            {
+                                ImpObj.InsertData();
+                                ImpObj.GetTable("CCCCOMMERCIALCOLLECTION").Current["CODE"] = exdcode.ToString();
+                                ImpObj.GetTable("CCCCOMMERCIALCOLLECTION").Current["NAME"] = exdname.Replace("'", "");
+                                ImpObj.GetTable("CCCCOMMERCIALCOLLECTION").Current["ISACTIVE"] = 1;
+                                ImpObj.PostData();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _xSupport.Exception($"Πρόβλημα στον Οίκο «{exdname}»." + ex.Message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _xSupport.Exception(ex.Message);
+                }
+            }
+        }
+        public void UpdateSupBarcodes(List<SupBarcodeRecord> exceldata)
+        {
+            if (exceldata.Count() > 0)
+            {
+                try 
+                {
+                    foreach (var exd in exceldata)
+                    { 
+                        var exdtaxcode = exd.TaxCode;
+                        var exdsupbarcode = exd.SupBarcode;
+                        try
+                        {
+                            var updquery = $@"UPDATE MTRL SET CCCSUPBARCODE='{exdsupbarcode}' WHERE CODE2='{exdtaxcode}' AND COMPANY={_xSupport.ConnectionInfo.CompanyId}";
+                            _xSupport.ExecuteSQL(updquery);
+                        }
+                        catch (Exception ex)
+                        {
+                            _xSupport.Exception($"Πρόβλημα στο Barcode Προμηθευτή «{exdsupbarcode}»." + ex.Message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _xSupport.Exception(ex.Message);
                 }
             }
         }
@@ -498,6 +712,186 @@ namespace MothercareImportData.Services
                 }
             }
         }
+        public void SetSimilarItems(List<SimilarItemRecord> exceldata, List<SqlData> item_list)
+        {
+            if (exceldata.Count() > 0)
+            {
+                try
+                {
+                    var grouped = exceldata.GroupBy(r => r.ItemCode).Select(g => new SimilarItemGroup
+                    {
+                        ItemCode = g.Key,
+                        ReferenceItemCodes = g.Select(r => r.ReferenceItemCode).ToList()
+                    }).ToList();
+                    foreach (var similar in grouped)
+                    {
+                        try
+                        {
+                            var mtrl_list = item_list.Where(x => x.Code.Trim() == similar.ItemCode.Trim()).FirstOrDefault();
+                            var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
+                            var mname = mtrl_list != null ? mtrl_list.Name : "";
+                            var similarCodes = similar.ReferenceItemCodes.Where(code => item_list.Any(item => item.Code.Trim() == code.Trim())).ToList();
+
+                            if (mtrl > 0 && similarCodes.Count > 0)
+                            {
+                                using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                                {
+                                    ItemObj.LocateData(mtrl);
+                                    //Πίνακας CCCSIMILARITEMS
+                                    using (var mtrsimilar = ItemObj.GetTable("CCCSIMILARITEMS"))
+                                    {
+                                        foreach (var code in similarCodes)
+                                        {
+                                            var similarItem_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
+                                            var similarItem = similarItem_list != null ? similarItem_list.Id : 0;
+                                            var recNo1 = mtrsimilar.Find("SIMMTRL", similarItem);
+                                            if (recNo1 == -1)
+                                            {
+                                                mtrsimilar.Current.Append();
+                                                mtrsimilar.Current["SIMMTRL"] = similarItem;
+                                                mtrsimilar.Current["SIMILARITY"] = Convert.ToDouble(100) ;
+                                                mtrsimilar.Current.Post();
+                                            }
+                                        }
+                                    }
+                                    ItemObj.PostData();
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _xSupport.Exception($"Πρόβλημα στο Όμοιο Είδος «{similar.ItemCode}»." + ex.Message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _xSupport.Exception(ex.Message);
+                }
+            }
+        }
+        public void CreateUpdateAttributes(List<AttributeRecord> attributes, List<SqlAttributeData> sqlAttributes)
+        {
+            if (attributes.Count() > 0)
+            {
+                // Βασικά δεδομένα ανά γλώσσα: key = (LanguageCode, Code, Line_Code)
+                var sqlBase = sqlAttributes
+                    .GroupBy(s => (s.LanguageCode, s.Code, s.Line_Code))
+                    .ToDictionary(
+                        g => g.Key,
+                        g => (Name: g.First().Description, LineName: g.First().Line_Description));
+                // Μεταφράσεις: key = (TransLanguage, Code, Line_Code)
+                var sqlTranslations = sqlAttributes
+                    .Where(s => s.LanguageCode_Translation.HasValue)
+                    .GroupBy(s => (s.LanguageCode_Translation.Value, s.Code, s.Line_Code))
+                    .ToDictionary(
+                        g => g.Key,
+                        g => (NameTrans: g.First().Description_Translation, LineNameTrans: g.First().Line_DescriptionTranslation));
+                // Ενοποιημένο lookup: (LanguageCode, Code, Line_Code) -> (Name, LineName)
+                var unifiedLookup = new Dictionary<(int Lang, string Code, string LineCode), (string Name, string LineName)>();
+
+                foreach (var kv in sqlBase)
+                    unifiedLookup[kv.Key] = kv.Value;
+
+                foreach (var kv in sqlTranslations)
+                    unifiedLookup[kv.Key] = kv.Value; // (Lang, Code, LineCode) -> (NameTrans, LineNameTrans)
+
+                var differences = new List<AttributeDifference>();
+
+                foreach (var rec in attributes)
+                {
+                    if (string.IsNullOrWhiteSpace(rec.Attribute1Code))
+                        continue; // free-text, δεν συγκρίνεται με κατάλογο
+
+                    var key = (rec.LanguageCode, rec.Attribute0Code, rec.Attribute1Code);
+
+                    if (!unifiedLookup.TryGetValue(key, out var sqlVal))
+                    {
+                        differences.Add(new AttributeDifference
+                        {
+                            ItemCode = rec.ItemCode,
+                            ExcelLanguageCode = rec.LanguageCode,
+                            Attribute0Code = rec.Attribute0Code,
+                            Attribute1Code = rec.Attribute1Code,
+                            Field = "Code/LineCode",
+                            ExcelValue = $"{rec.Attribute0Description} / {rec.Attribute1Description}",
+                            SqlValue = null,
+                            Reason = "MissingInSql"
+                        });
+                        continue;
+                    }
+
+                    if (!string.Equals(sqlVal.Name?.Trim(), rec.Attribute0Description?.Trim(), StringComparison.OrdinalIgnoreCase))
+                        differences.Add(new AttributeDifference
+                        {
+                            ItemCode = rec.ItemCode,
+                            ExcelLanguageCode = rec.LanguageCode,
+                            Attribute0Code = rec.Attribute0Code,
+                            Attribute1Code = rec.Attribute1Code,
+                            Field = "Attribute0Description",
+                            ExcelValue = rec.Attribute0Description,
+                            SqlValue = sqlVal.Name,
+                            Reason = "Mismatch"
+                        });
+
+                    if (!string.Equals(sqlVal.LineName?.Trim(), rec.Attribute1Description?.Trim(), StringComparison.OrdinalIgnoreCase))
+                        differences.Add(new AttributeDifference
+                        {
+                            ItemCode = rec.ItemCode,
+                            ExcelLanguageCode = rec.LanguageCode,
+                            Attribute0Code = rec.Attribute0Code,
+                            Attribute1Code = rec.Attribute1Code,
+                            Field = "Attribute1Description",
+                            ExcelValue = rec.Attribute1Description,
+                            SqlValue = sqlVal.LineName,
+                            Reason = "Mismatch"
+                        });
+                }
+                if (differences.Count > 0)
+                {
+                    foreach (var diff in differences)
+                    {
+                        try
+                        { 
+                            using (var AttributeObj = _xSupport.CreateModule("MTRATTRIBUTE;Attributes"))
+                            {
+                                var attribute_list = sqlAttributes.Where(x => x.Code.Trim() == diff.Attribute0Code.Trim()).FirstOrDefault();
+                                var attributeId = attribute_list != null ? attribute_list.Id : 0;
+                                if (attributeId > 0)
+                                {
+                                    AttributeObj.LocateData(attributeId);
+                                    AttributeObj.GetTable("MTRL").Current["CODE"] = "1";
+                                    AttributeObj.GetTable("MTRL").Current["NAME"] = "lala";
+                                    //Πίνακας ATTIBUTETRANSH
+                                    using (var attributetrnsh = AttributeObj.GetTable("ATTIBUTETRANSH"))
+                                    {
+                                        var recNo1 = attributetrnsh.Find("MTRATTRIBUTE", attributeId);
+                                        if (recNo1 != -1)
+                                        {
+                                            attributetrnsh.Current.Append();
+                                            attributetrnsh.Current["MTRATTRIBUTE"] = attributeId;
+                                            attributetrnsh.Current.Post();
+                                        }
+                                    }
+                                    AttributeObj.PostData();
+                                }
+                                else
+                                {
+                                    AttributeObj.InsertData();
+                                    AttributeObj.GetTable("MTRL").Current["CODE"] = "1";
+                                    AttributeObj.GetTable("MTRL").Current["NAME"] = "lala";
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _xSupport.Exception($"Πρόβλημα στο Attribute «{diff.Attribute0Code}»." + ex.Message);
+                        }
+                    }
+                }
+            }
+        }
+
         public void CreateUpdateItems(List<ItemMasterRecord> exceldata, List<SqlData> sqlData)
         {
             var logs_remarks = "";
@@ -507,7 +901,7 @@ namespace MothercareImportData.Services
                 var theme_list = sqlData.Where(x => x.Obj == "theme").ToList();
                 var division_list = sqlData.Where(x => x.Obj == "division").ToList();
                 var department_list = sqlData.Where(x => x.Obj == "department").ToList();
-                var subdepartment_list = sqlData.Where(x => x.Obj == "subdepartment").ToList();
+                var subdepartment_list = sqlData.Where(x => x.Obj == "subdept").ToList();
                 var class_list = sqlData.Where(x => x.Obj == "class").ToList();
                 var size_list = sqlData.Where(x => x.Obj == "size").ToList();
                 var color_list = sqlData.Where(x => x.Obj == "color").ToList();
@@ -515,13 +909,17 @@ namespace MothercareImportData.Services
                 var intrastat_list = sqlData.Where(x => x.Obj == "intrastat").ToList();
                 var season_list = sqlData.Where(x => x.Obj == "season").ToList();
                 var collection_list = sqlData.Where(x => x.Obj == "collection").ToList();
+                var commercialcollection_list = sqlData.Where(x => x.Obj == "commercialcollection").ToList();
                 var vat_list = sqlData.Where(x => x.Obj == "vat").ToList();
                 var busunit_list = sqlData.Where(x => x.Obj == "busunit").ToList();
                 var itemtype_list = sqlData.Where(x => x.Obj == "itemtype").ToList();
                 var accountingtype_list = sqlData.Where(x => x.Obj == "accountingtype").ToList();
                 var country_list = sqlData.Where(x => x.Obj == "country").ToList();
                 var supplier_list = sqlData.Where(x => x.Obj == "supplier").ToList();
-                
+                var sizeguide_list = sqlData.Where(x => x.Obj == "sizeguide").ToList();
+                var seasonality_list = sqlData.Where(x => x.Obj == "seasonality").ToList();
+                var house_list = sqlData.Where(x => x.Obj == "house").ToList();
+
                 using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
                 {
                     var counter = 0;
@@ -550,22 +948,31 @@ namespace MothercareImportData.Services
                             ItemObj.GetTable("MTRL").Current["NAME"] = item.Name;
 
                             ItemObj.GetTable("MTRL").Current["CODE2"] = item.TaxCode;
-                            //ItemObj.GetTable("MTRL").Current["AssortmentDescription"] = item.AssortmentDescription;
-                            //ItemObj.GetTable("MTRL").Current["SupplierCode"] = item.SupplierCode;
+                            ItemObj.GetTable("MTRL").Current["CCCASSORTMENTDESCR"] = item.AssortmentDescription;
+                            ItemObj.GetTable("MTRL").Current["CCCSUPPLIERCODE"] = item.SupplierCode;
 
                             ItemObj.GetTable("MTRL").Current["NAME1"] = item.EnglishDescription;
                             ItemObj.GetTable("MTRL").Current["REMARKS"] = item.Comments;
-                            ItemObj.GetTable("MTRL").Current["MTRUNIT1"] = 101;
+                            var mtrunit = 0;
+                            switch(item.UnitOfMeasure)
+                            {
+                                case 1 /*ΤΕΜΑΧΙΟ*/ : mtrunit = 101 /*Τεμ.*/; break;
+                                case 2 /*ΜΕΤΡΟ*/ : mtrunit = 120 /*Μέτρα*/; break;
+                                case 4 /*ΚΙΛΑ*/: mtrunit = 150 /*Κιλά*/; break;
+                                case 6 /*Κ.ΜΕΤΡΑ*/: mtrunit = 140 /*Κ.Μέτ*/; break;
+                                default: mtrunit = 101; break;
+                            }
+                            ItemObj.GetTable("MTRL").Current["MTRUNIT1"] = mtrunit;
                             ItemObj.GetTable("MTRL").Current["MTRUNIT2"] = item.PackageQuantity > 0 ? 108 : 101;
-                            ItemObj.GetTable("MTRL").Current["MTRUNIT3"] = 101;
-                            ItemObj.GetTable("MTRL").Current["MTRUNIT4"] = 101;
+                            ItemObj.GetTable("MTRL").Current["MTRUNIT3"] = mtrunit;
+                            ItemObj.GetTable("MTRL").Current["MTRUNIT4"] = mtrunit;
                             ItemObj.GetTable("MTRL").Current["MU21"] = item.PackageQuantity > 0 ? Convert.ToDouble(item.PackageQuantity) : 1;
                             ItemObj.GetTable("MTRL").Current["MU31"] = Convert.ToDouble(1);
                             ItemObj.GetTable("MTRL").Current["MU41"] = Convert.ToDouble(1);
                             ItemObj.GetTable("MTRL").Current["MU12MODE"] = 1;
                             ItemObj.GetTable("MTRL").Current["MU13MODE"] = 1;
                             ItemObj.GetTable("MTRL").Current["MU14MODE"] = 1;
-                            //ItemObj.GetTable("MTRL").Current["ComposedOfQuantity"] = item.ComposedOfQuantity;
+                            ItemObj.GetTable("MTRL").Current["CCCCOMPOSEDOFQTY"] = item.ComposedOfQuantity;
 
                             var divisionId = division_list.Where(x => x.Code.Trim() == item.Division.ToString().Trim()).FirstOrDefault()?.Id ?? null;
                             ItemObj.GetTable("MTRL").Current["CCCDIVISION"] = divisionId;
@@ -590,19 +997,37 @@ namespace MothercareImportData.Services
                             //var colorId = 0;//item.Color;
                             //ItemObj.GetTable("MTRL").Current["CCCCOLOR"] = colorId;
 
+                            var sizeguideId = sizeguide_list.Where(x => x.Code.Trim() == item.SizeGuide.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCSIZEGUIDE"] = sizeguideId;
+
                             var brandId = brand_list.Where(x => x.Code.Trim() == "MC" + item.Brand.ToString().Trim()).FirstOrDefault()?.Id ?? null;
                             ItemObj.GetTable("MTRL").Current["CCCBRAND"] = brandId;
 
-                            //ItemObj.GetTable("MTRL").Current["House"] = item.House;
+                            var houseId = house_list.Where(x => x.Code.Trim() == item.House.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCHOUSE"] = houseId;
 
-                            //ItemObj.GetTable("MTRL").Current["VatCategory"] = item.VatCategory;
-                            ItemObj.GetTable("MTRL").Current["VAT"] = 1410;
+                            var vat = 0;
+                            switch (item.VatCategory)
+                            {
+                                case 1 /*Υψηλός Συντελεστής*/ : vat = 1410 /*24*/; break;
+                                case 2 /*Χαμηλός Συντελεστής*/ : vat = 1060 /*6*/; break;
+                                case 3 /*Μεσαίος Συντελεστής*/: vat = 1131 /*13*/; break;
+                                case 4 /*Μηδενικός Συντελεστής*/: vat = 0 /*0*/; break;
+                                default: vat = 1410; break;
+                            }
+                            ItemObj.GetTable("MTRL").Current["VAT"] = vat;
 
                             ItemObj.GetTable("MTRL").Current["CCCFASI"] = item.Phase;
-                            ItemObj.GetTable("MTRL").Current["CCCSEASONALITY"] = item.Seasonality;
+
+                            var seasonalityId = seasonality_list.Where(x => x.Code.Trim() == item.Seasonality.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCSEASONALITY"] = seasonalityId;
+
                             ItemObj.GetTable("MTRL").Current["CCCLISTUP"] = item.ListUp;
 
-                            //ItemObj.GetTable("MTRL").Current["OUTLET"] = item.Outlet;
+                            if (item.Outlet != null)
+                            {
+                                ItemObj.GetTable("MTRL").Current["CCCOUTLET"] = item.Outlet;
+                            }
 
                             ItemObj.GetTable("MTRL").Current["GWEIGHT"] = item.NetWeight;
 
@@ -612,12 +1037,15 @@ namespace MothercareImportData.Services
                             var intrastatId = intrastat_list.Where(x => x.Code.Trim() == item.Intrastat.ToString().Trim()).FirstOrDefault()?.Id ?? null;
                             ItemObj.GetTable("MTRL").Current["INTRASTAT"] = intrastatId;
 
-                            ItemObj.GetTable("MTRL").Current["ISACTIVE"] = item.Status == 0 ? 1 : 0;
+                            ItemObj.GetTable("MTRL").Current["ISACTIVE"] = 1;
+
+                            ItemObj.GetTable("MTRL").Current["CCCMSSTATUS"] = item.Status;
 
                             var collectionId = collection_list.Where(x => x.Code.Trim() == item.Collection.ToString().Trim()).FirstOrDefault()?.Id ?? null;
                             ItemObj.GetTable("MTREXTRA").Current["UTBL04"] = collectionId;
 
-                            //ItemObj.GetTable("MTRL").Current["CommercialCollection"] = item.CommercialCollection;
+                            var commercialcollectionId = commercialcollection_list.Where(x => x.Code.Trim() == item.CommercialCollection.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCCOMMERCIALCOLLECTION"] = commercialcollectionId;
 
                             var buId = busunit_list.Where(x => x.Code.Trim() == "MC" + item.Bu.ToString().Trim()).FirstOrDefault()?.Id ?? null;
                             ItemObj.GetTable("MTRL").Current["BUSUNITS"] = buId;
@@ -643,6 +1071,9 @@ namespace MothercareImportData.Services
                             ItemObj.GetTable("MTRL").Current["CCCHASTRANSLATION"] = item.HasTranslation;
                             ItemObj.GetTable("MTRL").Current["CCCISPUBLISHEDINGR"] = item.IsPublishedInGr;
                             ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINSKROUTZ"] = item.ToBePublishedInSkroutz;
+                            ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINPUBLIC"] = item.ToBePublishedInPublic;
+
+
                             ////Πίνακας MTRSUBSTITUTE
                             //using (var mtrsubstitute = ItemObj.GetTable("MTRSUBSTITUTE"))
                             //{
@@ -670,7 +1101,33 @@ namespace MothercareImportData.Services
                             //        mtrsupcode.Current.Post();
                             //    }
                             //}
-                            ItemObj.PostData();
+                            var newId =ItemObj.PostData();
+                            newId = newId < 0 ? mtrl : newId;
+
+                            //Images
+                            if (item.ImagePath != "" && newId>0)
+                            {
+                                var queryimage = $@"SELECT REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,SODATA,DEFXTRDOC,XDOCTYPE,SOMD FROM XTRDOCDATA 
+                                                    WHERE REFOBJID={newId} AND SOSOURCE = 51 AND LNUM=0 AND SOFNAME ='{item.ImagePath}' ";
+                                using (var ds = _xSupport.GetSQLDataSet(queryimage, null))
+                                { 
+                                    try
+                                    {
+                                        if (ds.Count == 0)
+                                        {
+                                            var execsql = "";
+                                            execsql = $"DELETE FROM XTRDOCDATA WHERE REFOBJID={newId} AND SOSOURCE = 51; ";
+                                            execsql = execsql + $@"INSERT INTO XTRDOCDATA (REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,NAME,SOFNAME,DEFXTRDOC,XDOCTYPE,SOMD) 
+                                                                    VALUES ({newId},51 ,0 ,1 ,0 ,'{item.PhotoName}','{item.ImagePath}' ,0 ,0 ,0); ";
+                                            _xSupport.ExecuteSQL(execsql);
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        throw new Exception(ex.Message);
+                                    }
+                                }
+                            }
                         }
                         catch (Exception ex)
                         {

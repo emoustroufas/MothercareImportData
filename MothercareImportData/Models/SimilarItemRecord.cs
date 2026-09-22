@@ -11,4 +11,9 @@ namespace MothercareImportData.Models
         public string ItemCode { get; set; }//AP_EIDH_CD
         public string ReferenceItemCode { get; set; }//AP_EIDH_CD_REF
     }
+    public class SimilarItemGroup
+    {
+        public string ItemCode { get; set; }
+        public List<string> ReferenceItemCodes { get; set; }
+    }
 }

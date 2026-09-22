@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -35,6 +36,10 @@ namespace MothercareImportData
         private List<SqlData> accountingtype_list;
         private List<SqlData> country_list;
         private List<SqlData> supplier_list;
+        private List<SqlData> sizeguide_list;
+        private List<SqlData> seasonality_list;
+        private List<SqlData> house_list;
+        private List<SqlData> commercialcollection_list;
         //Excel Data
         private List<ItemMasterRecord> items;
         private List<BarcodeRecord> barcodes;
@@ -47,12 +52,16 @@ namespace MothercareImportData
         private List<CommercialCollectionRecord> commercialCollections;
         private List<BuRecord> businessUnits;
         private List<ItemTypeRecord> itemTypes;
-        private List<StatusRecord> statuses;
+        //private List<StatusRecord> statuses;
         private List<AccountingTypeRecord> accountingTypes;
         private List<SimilarItemRecord> similarItems;
         private List<AddOnRecord> addOns;
         private List<AttributeRecord> attributes;
         private List<TagRecord> tags;
+        private List<SizeGuideRecord> sizeGuides;
+        private List<SeasonalityRecord> seasonalities;
+        private List<HouseRecord> houses;
+        private List<SupBarcodeRecord> supbarcodes;
         public override void Initialize()
         {
             XModule.SetEvent("ON_CCCVMCIMPPARAMS_PATH", On_CccVMCImpParams_Path);
@@ -65,7 +74,7 @@ namespace MothercareImportData
                 theme_list = sqlData.Where(x => x.Obj == "theme").ToList();
                 division_list = sqlData.Where(x => x.Obj == "division").ToList();
                 department_list = sqlData.Where(x => x.Obj == "department").ToList();
-                subdepartment_list = sqlData.Where(x => x.Obj == "subdepartment").ToList();
+                subdepartment_list = sqlData.Where(x => x.Obj == "subdept").ToList();
                 class_list = sqlData.Where(x => x.Obj == "class").ToList();
                 size_list = sqlData.Where(x => x.Obj == "size").ToList();
                 color_list = sqlData.Where(x => x.Obj == "color").ToList();
@@ -79,6 +88,10 @@ namespace MothercareImportData
                 accountingtype_list = sqlData.Where(x => x.Obj == "accountingtype").ToList();
                 country_list = sqlData.Where(x => x.Obj == "country").ToList();
                 supplier_list = sqlData.Where(x => x.Obj == "supplier").ToList();
+                sizeguide_list = sqlData.Where(x => x.Obj == "sizeguide").ToList();
+                seasonality_list = sqlData.Where(x => x.Obj == "seasonality").ToList();
+                house_list = sqlData.Where(x => x.Obj == "house").ToList();
+                commercialcollection_list = sqlData.Where(x => x.Obj == "commercialcollection").ToList();
             }
             base.Initialize();
         }
@@ -177,6 +190,7 @@ namespace MothercareImportData
                         excelData = excelClient.ExportExcelData("Αρχείο Ειδών");
                         excelData.RemoveRange(0, numLinesToRemove);
                         items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
+                        items = items.Where(x => x.ItemType == 1).ToList();//ΕΜΠΟΡΕΥΜΑ
                         if (items.Count > 0)
                         {
                             var newdata = false;
@@ -184,7 +198,7 @@ namespace MothercareImportData
                             var intrastats = items.Select(i => i.Intrastat).Distinct().ToList();
                             if (intrastats.Count > 0)
                             {
-                                var differences = intrastats.Where(d => !intrastat_list.Any(s => s.Code == d)).ToList();
+                                var differences = intrastats.Where(d => !intrastat_list.Any(s => s.Code == d.Substring(0, (d.Length>8 ? 8 : d.Length)))).ToList();
                                 if (differences.Count > 0)
                                 {
                                     newdata = true;
@@ -303,11 +317,23 @@ namespace MothercareImportData
                             }
                         }
                         break;
-                    //case 9:
-                    //    excelData = excelClient.ExportExcelData("Εμπορική Συλλογή");
-                    //    excelData.RemoveRange(0, numLinesToRemove);
-                    //    commercialCollections = ExcelFileService.GetExcelData<CommercialCollectionRecord>(excelData, firstLineInUse);
-                    //    break;
+                    case 9:
+                        //    excelData = excelClient.ExportExcelData("Εμπορική Συλλογή");
+                        //    excelData.RemoveRange(0, numLinesToRemove);
+                        //    commercialCollections = ExcelFileService.GetExcelData<CommercialCollectionRecord>(excelData, firstLineInUse);
+                        //    break;
+                        excelData = excelClient.ExportExcelData("Εμπορική Συλλογή");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        commercialCollections = ExcelFileService.GetExcelData<CommercialCollectionRecord>(excelData, firstLineInUse);
+                        if (commercialCollections.Count > 0)
+                        {
+                            var differences = commercialCollections.Where(d => !commercialcollection_list.Any(s => s.Code == d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateCommercialCollection(differences);
+                            }
+                        }
+                        break;
                     case 10:
                         excelData = excelClient.ExportExcelData("BU");
                         excelData.RemoveRange(0, numLinesToRemove);
@@ -334,11 +360,6 @@ namespace MothercareImportData
                             }
                         }
                         break;
-                    //case 12:
-                    //    excelData = excelClient.ExportExcelData("status");
-                    //    excelData.RemoveRange(0, numLinesToRemove);
-                    //    statuses = ExcelFileService.GetExcelData<StatusRecord>(excelData, firstLineInUse);
-                    //    break;
                     case 13:
                         excelData = excelClient.ExportExcelData("τύπος για λογιστική");
                         excelData.RemoveRange(0, numLinesToRemove);
@@ -352,26 +373,84 @@ namespace MothercareImportData
                             }
                         }
                         break;
-                    //case 14:
-                    //    excelData = excelClient.ExportExcelData("όμοια είδη");
-                    //    excelData.RemoveRange(0, numLinesToRemove);
-                    //    similarItems = ExcelFileService.GetExcelData<SimilarItemRecord>(excelData, firstLineInUse);
-                    //    break;
+                    case 14:
+                        excelData = excelClient.ExportExcelData("όμοια είδη");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        similarItems = ExcelFileService.GetExcelData<SimilarItemRecord>(excelData, firstLineInUse);
+                        if (similarItems.Count > 0)
+                        { 
+                            softoneService.SetSimilarItems(similarItems, item_list);
+                        }
+                        break;
                     //case 15:
                     //    excelData = excelClient.ExportExcelData("add ons");
                     //    excelData.RemoveRange(0, numLinesToRemove);
                     //    addOns = ExcelFileService.GetExcelData<AddOnRecord>(excelData, firstLineInUse);
                     //    break;
-                    //case 16:
-                    //    excelData = excelClient.ExportExcelData("attributes");
-                    //    excelData.RemoveRange(0, numLinesToRemove);
-                    //    attributes = ExcelFileService.GetExcelData<AttributeRecord>(excelData, firstLineInUse);
-                    //    break;
+                    case 16:
+                        excelData = excelClient.ExportExcelData("attributes");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        attributes = ExcelFileService.GetExcelData<AttributeRecord>(excelData, firstLineInUse);
+                        if (attributes.Count > 0)
+                        {
+                            var sqlAttributes = softoneService.GetSqlAttributeData();
+                            softoneService.CreateUpdateAttributes(attributes, sqlAttributes);
+
+                        }
+                        break;
                     //case 17:
                     //    excelData = excelClient.ExportExcelData("tags");
                     //    excelData.RemoveRange(0, numLinesToRemove);
                     //    tags = ExcelFileService.GetExcelData<TagRecord>(excelData, firstLineInUse);
                     //break;
+                    case 18:
+                        excelData = excelClient.ExportExcelData("μεγεθολόγιο");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        sizeGuides = ExcelFileService.GetExcelData<SizeGuideRecord>(excelData, firstLineInUse);
+                        if (sizeGuides.Count > 0)
+                        {
+                            var differences = sizeGuides.Where(d => !sizeguide_list.Any(s => s.Code == d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateSizeGuide(differences);
+                            }
+                        }
+                        break;
+                    case 19:
+                        excelData = excelClient.ExportExcelData("Εποχικότητα");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        seasonalities = ExcelFileService.GetExcelData<SeasonalityRecord>(excelData, firstLineInUse);
+                        if (seasonalities.Count > 0)
+                        {
+                            var differences = seasonalities.Where(d => !seasonality_list.Any(s => s.Code == d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateSeasonality(differences);
+                            }
+                        }
+                        break;
+                    case 20:
+                        excelData = excelClient.ExportExcelData("Οίκος");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        houses = ExcelFileService.GetExcelData<HouseRecord>(excelData, firstLineInUse);
+                        if (houses.Count > 0)
+                        {
+                            var differences = houses.Where(d => !house_list.Any(s => s.Code == d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateHouse(differences);
+                            }
+                        }
+                        break;
+                    case 21:
+                        excelData = excelClient.ExportExcelData("barcode προμηθευτών");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        supbarcodes = ExcelFileService.GetExcelData<SupBarcodeRecord>(excelData, firstLineInUse);
+                        if (supbarcodes.Count > 0)
+                        {
+                            softoneService.UpdateSupBarcodes(supbarcodes);
+                        }
+                        break;
                 }
                 XSupport.Warning("Τέλος Εργασίας!");
                 XModule.CloseForm();
