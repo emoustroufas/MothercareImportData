@@ -52,7 +52,7 @@ namespace MothercareImportData.Services
                         item.Phase = Convert.ToInt32(FileUtil.InBounds(24, row.Columns) ? (row.Columns.Count > 24 ? (row.Columns[24] != "" ? row.Columns[24] : "0") : "0") : "0");
                         item.Seasonality = Convert.ToInt32(FileUtil.InBounds(25, row.Columns) ? (row.Columns.Count > 25 ? (row.Columns[25] != "" ? row.Columns[25] : "0") : "0") : "0");
                         item.ListUp = Convert.ToInt32(FileUtil.InBounds(26, row.Columns) ? (row.Columns.Count > 26 ? (row.Columns[26] != "" ? row.Columns[26] : "0") : "0") : "0");
-                        item.Outlet = Convert.ToDateTime(FileUtil.InBounds(27, row.Columns) ? (row.Columns.Count > 27 ? row.Columns[27] !=""? DateTime.Parse(row.Columns[27]) : (DateTime?)null : (DateTime?)null) : (DateTime?)null);
+                        item.Outlet = Convert.ToDateTime(FileUtil.InBounds(27, row.Columns) ? (row.Columns.Count > 27 ? row.Columns[27] != "" ? DateTime.Parse(row.Columns[27]) : (DateTime?)null : (DateTime?)null) : (DateTime?)null);
                         item.NetWeight = Convert.ToDouble(FileUtil.InBounds(28, row.Columns) ? (row.Columns.Count > 28 ? (row.Columns[28] != "" ? row.Columns[28] : "0.0") : "0.0") : "0.0");
                         item.CountryOfOrigin = FileUtil.InBounds(29, row.Columns) ? (row.Columns.Count > 29 ? row.Columns[29] : "") : "";
                         item.Intrastat = FileUtil.InBounds(30, row.Columns) ? (row.Columns.Count > 30 ? row.Columns[30] : "") : "";
@@ -60,7 +60,7 @@ namespace MothercareImportData.Services
                         item.Collection = FileUtil.InBounds(32, row.Columns) ? (row.Columns.Count > 32 ? row.Columns[32] : "") : "";
                         item.CommercialCollection = FileUtil.InBounds(33, row.Columns) ? (row.Columns.Count > 33 ? row.Columns[33] : "") : "";
                         item.Bu = FileUtil.InBounds(34, row.Columns) ? (row.Columns.Count > 34 ? row.Columns[34] : "") : "";
-                        item.ItemType = Convert.ToInt32(FileUtil.InBounds(35, row.Columns) ? (row.Columns.Count > 35 ? (row.Columns[35] != "" ? row.Columns[35] : "0")   : "0") : "0");
+                        item.ItemType = Convert.ToInt32(FileUtil.InBounds(35, row.Columns) ? (row.Columns.Count > 35 ? (row.Columns[35] != "" ? row.Columns[35] : "0") : "0") : "0");
                         item.AccountingType = FileUtil.InBounds(36, row.Columns) ? (row.Columns.Count > 36 ? row.Columns[36] : "") : "";
                         item.ImagePath = FileUtil.InBounds(37, row.Columns) ? (row.Columns.Count > 37 ? row.Columns[37] : "") : "";
                         item.RestockWithPackage = Convert.ToInt32(FileUtil.InBounds(38, row.Columns) ? (row.Columns.Count > 38 ? (row.Columns[38] != "" ? row.Columns[38] : "0") : "0") : "0");
@@ -280,24 +280,24 @@ namespace MothercareImportData.Services
                     }
                 }
             }
-            else if (typeof(T) == typeof(AttributeRecord))
-            {
-                foreach (var row in rows)
-                {
-                    var attribute = new AttributeRecord();
-                    if (row.Columns.Any())
-                    {
-                        attribute.LanguageCode = Convert.ToInt32(FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "0") : "0");
-                        attribute.ItemCode = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
-                        attribute.Attribute0Code = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
-                        attribute.Attribute0Description = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? row.Columns[3] : "") : "";
-                        attribute.Attribute1Code = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? row.Columns[4] : "") : "";
-                        attribute.Attribute1Description = FileUtil.InBounds(5, row.Columns) ? (row.Columns.Count > 5 ? row.Columns[5] : "") : "";
-                        attribute.FreeText = FileUtil.InBounds(6, row.Columns) ? (row.Columns.Count > 6 ? row.Columns[6] : "") : "";
-                        result.Add((T)(object)attribute);
-                    }
-                }
-            }
+            //else if (typeof(T) == typeof(AttributeRecord))
+            //{
+            //    foreach (var row in rows)
+            //    {
+            //        var attribute = new AttributeRecord();
+            //        if (row.Columns.Any())
+            //        {
+            //            attribute.LanguageCode = Convert.ToInt32(FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "0") : "0");
+            //            attribute.ItemCode = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+            //            attribute.Attribute0Code = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
+            //            attribute.Attribute0Description = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? row.Columns[3] : "") : "";
+            //            attribute.Attribute1Code = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? row.Columns[4] : "") : "";
+            //            attribute.Attribute1Description = FileUtil.InBounds(5, row.Columns) ? (row.Columns.Count > 5 ? row.Columns[5] : "") : "";
+            //            attribute.FreeText = FileUtil.InBounds(6, row.Columns) ? (row.Columns.Count > 6 ? row.Columns[6] : "") : "";
+            //            result.Add((T)(object)attribute);
+            //        }
+            //    }
+            //}
             else if (typeof(T) == typeof(TagRecord))
             {
                 foreach (var row in rows)
@@ -367,6 +367,60 @@ namespace MothercareImportData.Services
                         result.Add((T)(object)supBarcode);
                     }
                 }
+            }
+
+            else if (typeof(T) == typeof(Models.AttributeRecord))
+            {
+                List<AttributeRecord> attributes = new List<AttributeRecord>();
+                foreach (var row in rows)
+                {
+                    var langCode = Convert.ToInt32(FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? (row.Columns[0] != "" ? row.Columns[0] : "0") : "0") : "0");
+                    var attributeCode = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+                    string attributeDescription = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
+                    var valueCode = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? row.Columns[3] : "") : "";
+                    string valueDescription = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? row.Columns[4] : "") : "";
+                    // Βρίσκουμε ή δημιουργούμε το Attribute
+                    AttributeRecord attribute = attributes.FirstOrDefault(x => x.Code == attributeCode);
+                    if (attribute == null)
+                    {
+                        attribute = new AttributeRecord
+                        {
+                            Code = attributeCode
+                        };
+                        attributes.Add(attribute);
+                    }
+                    // Προσθέτουμε τη μετάφραση του Attribute
+                    if (!attribute.Translations.Any(x => x.LanguageCode == langCode))
+                    {
+                        attribute.Translations.Add(new AttributeTranslation
+                        {
+                            LanguageCode = langCode,
+                            Description = attributeDescription
+                        });
+                    }
+                    // Βρίσκουμε ή δημιουργούμε το Value
+                    AttributeValue value = attribute.Values.FirstOrDefault(x => x.Code == valueCode);
+                    if (value == null)
+                    {
+                        value = new AttributeValue
+                        {
+                            Code = valueCode
+                        };
+
+                        attribute.Values.Add(value);
+                    }
+                    // Προσθέτουμε τη μετάφραση του Value
+                    if (!value.Translations.Any(x => x.LanguageCode == langCode))
+                    {
+                        value.Translations.Add(new AttributeValueTranslation
+                        {
+                            LanguageCode = langCode,
+                            Description = valueDescription
+                        });
+                    }
+                }
+                result.AddRange((IEnumerable<T>)attributes);
+                    //Add((T)(object)attributes);
             }
             return result;
         }

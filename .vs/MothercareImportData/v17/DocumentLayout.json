@@ -3,24 +3,24 @@
   "WorkspaceRootPath": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|c:\\users\\evangelos\\onedrive\\desktop\\projects\\mothercareimportdata\\mothercareimportdata\\services\\softoneservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "AbsoluteMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\mothercareimportdata\\services\\softoneservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|solutionrelative:mothercareimportdata\\services\\softoneservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\mothercareimportdata\\mcimpdata.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|solutionrelative:mothercareimportdata\\mcimpdata.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\mothercareimportdata\\services\\excelfileservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|solutionrelative:mothercareimportdata\\services\\excelfileservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|c:\\users\\evangelos\\onedrive\\desktop\\projects\\mothercareimportdata\\mothercareimportdata\\models\\supbarcoderecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|solutionrelative:mothercareimportdata\\models\\supbarcoderecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|c:\\users\\evangelos\\onedrive\\desktop\\projects\\mothercareimportdata\\mothercareimportdata\\mcimpdata.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|solutionrelative:mothercareimportdata\\mcimpdata.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\mothercareimportdata\\models\\attributerecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|solutionrelative:mothercareimportdata\\models\\attributerecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\mothercareimportdata\\services\\excelsheetreader.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{68452840-F443-424A-B288-79A443408530}|MothercareImportData\\MothercareImportData.csproj|solutionrelative:mothercareimportdata\\services\\excelsheetreader.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -34,28 +34,28 @@
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "SupBarcodeRecord.cs",
-              "DocumentMoniker": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Models\\SupBarcodeRecord.cs",
-              "RelativeDocumentMoniker": "MothercareImportData\\Models\\SupBarcodeRecord.cs",
-              "ToolTip": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Models\\SupBarcodeRecord.cs",
-              "RelativeToolTip": "MothercareImportData\\Models\\SupBarcodeRecord.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAABAAAAAAAAAA==",
+              "DocumentIndex": 4,
+              "Title": "ExcelSheetReader.cs",
+              "DocumentMoniker": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Services\\ExcelSheetReader.cs",
+              "RelativeDocumentMoniker": "MothercareImportData\\Services\\ExcelSheetReader.cs",
+              "ToolTip": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Services\\ExcelSheetReader.cs",
+              "RelativeToolTip": "MothercareImportData\\Services\\ExcelSheetReader.cs",
+              "ViewState": "AgIAAEIAAAAAAAAAAAAtwFAAAAAJAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-09-22T12:21:44.122Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-09-24T07:18:14.66Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 3,
               "Title": "AttributeRecord.cs",
               "DocumentMoniker": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Models\\AttributeRecord.cs",
               "RelativeDocumentMoniker": "MothercareImportData\\Models\\AttributeRecord.cs",
               "ToolTip": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Models\\AttributeRecord.cs",
               "RelativeToolTip": "MothercareImportData\\Models\\AttributeRecord.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAA3AAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACQAAAAJAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-07-28T10:23:29.599Z"
+              "WhenOpened": "2026-09-24T06:59:22.007Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
@@ -65,33 +65,33 @@
               "RelativeDocumentMoniker": "MothercareImportData\\Services\\SoftoneService.cs",
               "ToolTip": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Services\\SoftoneService.cs",
               "RelativeToolTip": "MothercareImportData\\Services\\SoftoneService.cs",
-              "ViewState": "AgIAADAEAAAAAAAAAAAQwE4EAAAfAAAAAAAAAA==",
+              "ViewState": "AgIAACcAAAAAAAAAAAAAwK4EAAAfAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-07-09T10:10:06.605Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 2,
               "Title": "McImpData.cs",
               "DocumentMoniker": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\McImpData.cs",
               "RelativeDocumentMoniker": "MothercareImportData\\McImpData.cs",
               "ToolTip": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\McImpData.cs",
               "RelativeToolTip": "MothercareImportData\\McImpData.cs",
-              "ViewState": "AgIAAKEAAAAAAAAAAAAQwN0AAAAcAAAAAAAAAA==",
+              "ViewState": "AgIAANsBAAAAAAAAAAAAANUBAAA3AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-07-08T11:26:18.556Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 1,
               "Title": "ExcelFileService.cs",
               "DocumentMoniker": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Services\\ExcelFileService.cs",
               "RelativeDocumentMoniker": "MothercareImportData\\Services\\ExcelFileService.cs",
               "ToolTip": "C:\\Users\\Evangelos\\OneDrive\\Desktop\\projects\\MothercareImportData\\MothercareImportData\\Services\\ExcelFileService.cs",
               "RelativeToolTip": "MothercareImportData\\Services\\ExcelFileService.cs",
-              "ViewState": "AgIAAFMBAAAAAAAAAAAQwHIBAAAMAAAAAAAAAA==",
+              "ViewState": "AgIAADcBAAAAAAAAAAAewKgBAAAMAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-07-08T13:17:38.434Z",
               "EditorCaption": ""

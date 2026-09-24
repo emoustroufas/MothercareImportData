@@ -72,50 +72,135 @@ namespace MothercareImportData.Services
                 }
             }
         }
-        public List<SqlAttributeData> GetSqlAttributeData()
+
+        public List<AttributeRecord> GetSqlAttributeData()
         {
-            var sqldata = new List<SqlAttributeData>();
-            var query = $@"SELECT 'attributes' AS OBJ,
-                            1 /*'GR'*/ AS LANGUAGE , A.MTRATTRIBUTE AS ID,A.CODE,A.NAME,
-                            CASE WHEN ISNULL(C.INTERCODE,'')='GB' THEN 2 ELSE NULL END AS TRANS_LANGUAGE, ISNULL(B.TRANSLATION,'') AS TRANSLATION, 
-                            D.MTRATTRIBUTELN AS ID_LINE,D.CODE AS CODE_LINE,D.SOVALUE AS NAME_LINE,ISNULL(E.TRANSLATION,'') AS TRANSLATION_LINE
-                            FROM MTRATTRIBUTE A
-                            LEFT JOIN CCCATTIBUTETRANSLATION B ON B.MTRATTRIBUTE=A.MTRATTRIBUTE AND B.DATATYPE=1
-                            LEFT JOIN COUNTRY C ON C.COUNTRY=B.COUNTRY
-                            LEFT JOIN MTRATTRIBUTELN D ON D.MTRATTRIBUTE=A.MTRATTRIBUTE
-                            LEFT JOIN CCCATTIBUTETRANSLATION E ON D.MTRATTRIBUTE=E.MTRATTRIBUTE AND E.MTRATTRIBUTELN=D.MTRATTRIBUTELN AND E.DATATYPE=2 AND E.COUNTRY=B.COUNTRY
-                            WHERE A.ISACTIVE = 1 AND A.COMPANY={_xSupport.ConnectionInfo.CompanyId}";
-            using (var ds = _xSupport.GetSQLDataSet(query, null))
+            var sqldata = new List<AttributeRecord>();
+            try
             {
-                try
+                //Attributes
+                var attributelist = new List<AttributeRecord>();
+                var queryAttributes = $@"SELECT MTRATTRIBUTE,CODE,NAME FROM MTRATTRIBUTE WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISACTIVE=1";
+                using (var dsAttributes = _xSupport.GetSQLDataSet(queryAttributes, null))
                 {
-                    if (ds.Count > 0)
+                    try 
                     {
-                        for (int i = 0; i < ds.Count; i++)
+                        if (dsAttributes.Count > 0)
                         {
-                            var res = new SqlAttributeData
+                            for (int i = 0; i < dsAttributes.Count; i++)
                             {
-                                LanguageCode = ds.GetAsInteger(i, "LANGUAGE"),
-                                Id = ds.GetAsInteger(i, "ID"),
-                                Code = ds.GetAsString(i, "CODE"),
-                                Description = ds.GetAsString(i, "NAME"),
-                                LanguageCode_Translation = ds.GetAsInteger(i, "TRANS_LANGUAGE"),
-                                Description_Translation = ds.GetAsString(i, "TRANSLATION"),
-                                Line_Id = ds.GetAsInteger(i, "ID_LINE"),
-                                Line_Code = ds.GetAsString(i, "CODE_LINE"),
-                                Line_Description = ds.GetAsString(i, "NAME_LINE"),
-                                Line_DescriptionTranslation = ds.GetAsString(i, "TRANSLATION_LINE")
-                            };
-                            sqldata.Add(res);
+                                var mtrattributeId = dsAttributes.GetAsInteger(i, "MTRATTRIBUTE");
+                                //Attribute Translation
+                                var attributetranslationlist = new List<AttributeTranslation>();
+                                var queryAttributeTranslation = $@"SELECT MTRATTRIBUTE,CCCLANGUAGE,TRANSLATION FROM CCCATTIBUTETRANSLATION 
+                                                                    WHERE MTRATTRIBUTE={mtrattributeId} AND COMPANY={_xSupport.ConnectionInfo.CompanyId} 
+                                                                    AND ISNULL(CCCLANGUAGE,0)<>0 AND DATATYPE=1";
+                                using (var dsAttributeTranslation = _xSupport.GetSQLDataSet(queryAttributeTranslation, null))
+                                {
+                                    if (dsAttributeTranslation != null)
+                                    {
+                                        try
+                                        {
+                                            if (dsAttributeTranslation.Count > 0)
+                                            {
+                                                for (int j = 0; j < dsAttributeTranslation.Count; j++)
+                                                {
+                                                    var resAttributeTranslation = new AttributeTranslation
+                                                    {
+                                                        LanguageCode = dsAttributeTranslation.GetAsInteger(j, "CCCLANGUAGE"),
+                                                        Description = dsAttributeTranslation.GetAsString(j, "TRANSLATION")
+                                                    };
+                                                    attributetranslationlist.Add(resAttributeTranslation);
+                                                }
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            throw new Exception(ex.Message);
+                                        }
+                                    }
+                                }
+                                //Attribute Values
+                                var attributevaluelist = new List<AttributeValue>();
+                                var queryAttributeValues = $@"SELECT MTRATTRIBUTE,MTRATTRIBUTELN,CODE,SOVALUE FROM MTRATTRIBUTELN 
+                                                              WHERE MTRATTRIBUTE={mtrattributeId} AND COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISACTIVE=1";
+                                using (var dsAttributeValues = _xSupport.GetSQLDataSet(queryAttributeValues, null))
+                                {
+                                    try
+                                    {
+                                        if (dsAttributeValues.Count > 0)
+                                        {
+                                            for (int v = 0; v < dsAttributeValues.Count; v++)
+                                            {
+                                                var mtrattributevalueId = dsAttributeValues.GetAsInteger(v, "MTRATTRIBUTELN");
+                                                //Attribute Value Translation
+                                                var attributevaluetranslationlist = new List<AttributeValueTranslation>();
+                                                var queryAttributeValueTranslation = $@"SELECT MTRATTRIBUTE,MTRATTRIBUTELN,CCCLANGUAGE,TRANSLATION FROM CCCATTIBUTETRANSLATION 
+                                                                                        WHERE MTRATTRIBUTE={mtrattributeId} AND MTRATTRIBUTELN={mtrattributevalueId} 
+                                                                                        AND COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISNULL(CCCLANGUAGE,0)<>0 AND DATATYPE=2";
+                                                using (var dsAttributeValueTranslation = _xSupport.GetSQLDataSet(queryAttributeValueTranslation, null))
+                                                {
+                                                    if (dsAttributeValueTranslation != null)
+                                                    {
+                                                        try
+                                                        {
+                                                            if (dsAttributeValueTranslation.Count > 0)
+                                                            {
+                                                                for (int t = 0; t < dsAttributeValueTranslation.Count; t++)
+                                                                {
+                                                                    var resAttributeValueTranslation = new AttributeValueTranslation
+                                                                    {
+                                                                        LanguageCode = dsAttributeValueTranslation.GetAsInteger(t, "CCCLANGUAGE"),
+                                                                        Description = dsAttributeValueTranslation.GetAsString(t, "TRANSLATION")
+                                                                    };
+                                                                    attributevaluetranslationlist.Add(resAttributeValueTranslation);
+                                                                }
+                                                            }
+                                                        }
+                                                        catch (Exception ex)
+                                                        {
+                                                            throw new Exception(ex.Message);
+                                                        }
+                                                    }
+                                                }
+                                                var resAttributeValues = new AttributeValue
+                                                {
+                                                    SoftOneId = dsAttributeValues.GetAsInteger(v, "MTRATTRIBUTELN"),
+                                                    Code = dsAttributeValues.GetAsString(v, "CODE"),
+                                                    Translations = attributevaluetranslationlist
+                                                };
+                                                attributevaluelist.Add(resAttributeValues);
+                                            }
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        throw new Exception(ex.Message);
+                                    }
+                                }
+                                var res = new AttributeRecord
+                                {
+                                    SoftOneId = dsAttributes.GetAsInteger(i, "MTRATTRIBUTE"),
+                                    Code = dsAttributes.GetAsString(i, "CODE"),
+                                    Translations = attributetranslationlist,
+                                    Values = attributevaluelist
+                                };
+                                attributelist.Add(res);
+                            }
                         }
                     }
-                    return sqldata;
+                    catch (Exception ex)
+                    {
+                        throw new Exception(ex.Message);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    return sqldata;
-                    throw new Exception(ex.Message);
-                }
+                sqldata = attributelist;
+                return sqldata;
+            }
+            catch (Exception ex)
+            {
+                return sqldata;
+                throw new Exception(ex.Message);
             }
         }
         public void CreateSizeGuide(List<SizeGuideRecord> exceldata)
@@ -770,128 +855,163 @@ namespace MothercareImportData.Services
                 }
             }
         }
-        public void CreateUpdateAttributes(List<AttributeRecord> attributes, List<SqlAttributeData> sqlAttributes)
+        public void CreateUpdateAttributes(List<AttributeRecord> attributes)
         {
             if (attributes.Count() > 0)
             {
-                // Βασικά δεδομένα ανά γλώσσα: key = (LanguageCode, Code, Line_Code)
-                var sqlBase = sqlAttributes
-                    .GroupBy(s => (s.LanguageCode, s.Code, s.Line_Code))
-                    .ToDictionary(
-                        g => g.Key,
-                        g => (Name: g.First().Description, LineName: g.First().Line_Description));
-                // Μεταφράσεις: key = (TransLanguage, Code, Line_Code)
-                var sqlTranslations = sqlAttributes
-                    .Where(s => s.LanguageCode_Translation.HasValue)
-                    .GroupBy(s => (s.LanguageCode_Translation.Value, s.Code, s.Line_Code))
-                    .ToDictionary(
-                        g => g.Key,
-                        g => (NameTrans: g.First().Description_Translation, LineNameTrans: g.First().Line_DescriptionTranslation));
-                // Ενοποιημένο lookup: (LanguageCode, Code, Line_Code) -> (Name, LineName)
-                var unifiedLookup = new Dictionary<(int Lang, string Code, string LineCode), (string Name, string LineName)>();
-
-                foreach (var kv in sqlBase)
-                    unifiedLookup[kv.Key] = kv.Value;
-
-                foreach (var kv in sqlTranslations)
-                    unifiedLookup[kv.Key] = kv.Value; // (Lang, Code, LineCode) -> (NameTrans, LineNameTrans)
-
-                var differences = new List<AttributeDifference>();
-
-                foreach (var rec in attributes)
+                foreach (var attr in attributes)
                 {
-                    if (string.IsNullOrWhiteSpace(rec.Attribute1Code))
-                        continue; // free-text, δεν συγκρίνεται με κατάλογο
-
-                    var key = (rec.LanguageCode, rec.Attribute0Code, rec.Attribute1Code);
-
-                    if (!unifiedLookup.TryGetValue(key, out var sqlVal))
+                    try
                     {
-                        differences.Add(new AttributeDifference
+                        using (var AttributeObj = _xSupport.CreateModule("MTRATTRIBUTE;Attributes"))
                         {
-                            ItemCode = rec.ItemCode,
-                            ExcelLanguageCode = rec.LanguageCode,
-                            Attribute0Code = rec.Attribute0Code,
-                            Attribute1Code = rec.Attribute1Code,
-                            Field = "Code/LineCode",
-                            ExcelValue = $"{rec.Attribute0Description} / {rec.Attribute1Description}",
-                            SqlValue = null,
-                            Reason = "MissingInSql"
-                        });
-                        continue;
-                    }
-
-                    if (!string.Equals(sqlVal.Name?.Trim(), rec.Attribute0Description?.Trim(), StringComparison.OrdinalIgnoreCase))
-                        differences.Add(new AttributeDifference
-                        {
-                            ItemCode = rec.ItemCode,
-                            ExcelLanguageCode = rec.LanguageCode,
-                            Attribute0Code = rec.Attribute0Code,
-                            Attribute1Code = rec.Attribute1Code,
-                            Field = "Attribute0Description",
-                            ExcelValue = rec.Attribute0Description,
-                            SqlValue = sqlVal.Name,
-                            Reason = "Mismatch"
-                        });
-
-                    if (!string.Equals(sqlVal.LineName?.Trim(), rec.Attribute1Description?.Trim(), StringComparison.OrdinalIgnoreCase))
-                        differences.Add(new AttributeDifference
-                        {
-                            ItemCode = rec.ItemCode,
-                            ExcelLanguageCode = rec.LanguageCode,
-                            Attribute0Code = rec.Attribute0Code,
-                            Attribute1Code = rec.Attribute1Code,
-                            Field = "Attribute1Description",
-                            ExcelValue = rec.Attribute1Description,
-                            SqlValue = sqlVal.LineName,
-                            Reason = "Mismatch"
-                        });
-                }
-                if (differences.Count > 0)
-                {
-                    foreach (var diff in differences)
-                    {
-                        try
-                        { 
-                            using (var AttributeObj = _xSupport.CreateModule("MTRATTRIBUTE;Attributes"))
+                            var attributeId = attr.SoftOneId;
+                            if (attributeId > 0)
                             {
-                                var attribute_list = sqlAttributes.Where(x => x.Code.Trim() == diff.Attribute0Code.Trim()).FirstOrDefault();
-                                var attributeId = attribute_list != null ? attribute_list.Id : 0;
-                                if (attributeId > 0)
+                                AttributeObj.LocateData(attributeId);
+                                var name = attr.Translations.Any() ? attr.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description : (AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] !="" ? AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] : attr.Code);
+                                AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] = name;
+                                if (attr.Translations.Count > 0)
                                 {
-                                    AttributeObj.LocateData(attributeId);
-                                    AttributeObj.GetTable("MTRL").Current["CODE"] = "1";
-                                    AttributeObj.GetTable("MTRL").Current["NAME"] = "lala";
-                                    //Πίνακας ATTIBUTETRANSH
-                                    using (var attributetrnsh = AttributeObj.GetTable("ATTIBUTETRANSH"))
+                                    foreach (var trns in attr.Translations)
                                     {
-                                        var recNo1 = attributetrnsh.Find("MTRATTRIBUTE", attributeId);
-                                        if (recNo1 != -1)
+                                        //Πίνακας ATTIBUTETRANSH
+                                        using (var attributetrnsh = AttributeObj.GetTable("ATTIBUTETRANSH"))
                                         {
-                                            attributetrnsh.Current.Append();
-                                            attributetrnsh.Current["MTRATTRIBUTE"] = attributeId;
+                                            var recNo1 = attributetrnsh.Find("MTRATTRIBUTE;CCCLANGUAGE", attributeId, trns.LanguageCode);
+                                            if (recNo1 != -1)
+                                            {
+                                                attributetrnsh.Current.Append();
+                                                //attributetrnsh.Current["MTRATTRIBUTE"] = attributeId;
+                                                attributetrnsh.Current["CCCLANGUAGE"] = trns.LanguageCode;
+                                                attributetrnsh.Current["TRANSLATION"] = trns.Description;
+                                                //attributetrnsh.Current.Post();
+                                            }
+                                            else
+                                            {
+                                                attributetrnsh.Current["CCCLANGUAGE"] = trns.LanguageCode;
+                                                attributetrnsh.Current["TRANSLATION"] = trns.Description;
+                                                //attributetrnsh.Current.Post();
+                                            }
                                             attributetrnsh.Current.Post();
                                         }
                                     }
-                                    AttributeObj.PostData();
                                 }
-                                else
+                                if (attr.Values.Count>0)
                                 {
-                                    AttributeObj.InsertData();
-                                    AttributeObj.GetTable("MTRL").Current["CODE"] = "1";
-                                    AttributeObj.GetTable("MTRL").Current["NAME"] = "lala";
+                                    foreach (var val in attr.Values)
+                                    {
+                                        var attributelnId = val.SoftOneId;
+                                        using (var mtrattributeln = AttributeObj.GetTable("MTRATTRIBUTELN"))
+                                        {
+                                            if (val.SoftOneId > 0)
+                                            {
+                                                var recNo1 = mtrattributeln.Find("MTRATTRIBUTE;MTRATTRIBUTELN;CODE", attributeId, attributelnId, val.Code);
+                                                if (recNo1 != -1)
+                                                {
+                                                    //mtrattributeln.Current["CODE"] = val.Code;
+                                                    var nameln = val.Translations.Any() ? val.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description : val.Code;
+                                                    mtrattributeln.Current["SOVALUE"] = nameln;
+                                                    //mtrattributeln.Current.Post();
+                                                }
+                                            }
+                                            else
+                                            {
+                                                mtrattributeln.Current.Append();
+                                                mtrattributeln.Current["CODE"] = val.Code;
+                                                mtrattributeln.Current["SOVALUE"] = val.Translations.Any() ? val.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description : val.Code;
+                                                //mtrattributeln.Current.Post();
+                                            }
+
+                                            if (val.Translations.Count>0)
+                                            {
+                                                foreach (var trnsln in val.Translations.OrderBy(x=>x.LanguageCode))
+                                                {
+                                                    //Πίνακας ATTIBUTETRANSLN
+                                                    using (var attributetrnsln = AttributeObj.GetTable("ATTIBUTETRANSLN"))
+                                                    {
+                                                        var recNo1 = attributetrnsln.Find("MTRATTRIBUTE;MTRATTRIBUTELN;CCCLANGUAGE", attributeId, attributelnId, trnsln.LanguageCode);
+                                                        if (recNo1 != -1)
+                                                        {
+                                                            attributetrnsln.Current["CCCLANGUAGE"] = trnsln.LanguageCode;
+                                                            attributetrnsln.Current["TRANSLATION"] = trnsln.Description;
+                                                            //attributetrnsh.Current.Post();
+                                                        }
+                                                        else
+                                                        {
+                                                            attributetrnsln.Current.Append();
+                                                            attributetrnsln.Current["CCCLANGUAGE"] = trnsln.LanguageCode;
+                                                            attributetrnsln.Current["TRANSLATION"] = trnsln.Description;
+                                                            //attributetrnsh.Current.Post();
+                                                        }
+                                                        attributetrnsln.Current.Post();
+                                                    }
+                                                }
+                                            }
+                                            mtrattributeln.Current.Post();
+                                        }
+                                    }
                                 }
                             }
+                            else
+                            {
+                                AttributeObj.InsertData();
+                                AttributeObj.GetTable("MTRATTRIBUTE").Current["CODE"] = attr.Code;
+                                var name = attr.Translations.Any() ? attr.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description : attr.Code;
+                                AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] = name;
+                                if (attr.Translations.Count > 0)
+                                {
+                                    foreach (var trns in attr.Translations)
+                                    {
+                                        //Πίνακας ATTIBUTETRANSH
+                                        using (var attributetrnsh = AttributeObj.GetTable("ATTIBUTETRANSH"))
+                                        {
+                                            attributetrnsh.Current.Append();
+                                            attributetrnsh.Current["CCCLANGUAGE"] = trns.LanguageCode;
+                                            attributetrnsh.Current["TRANSLATION"] = trns.Description;
+                                            attributetrnsh.Current.Post();
+                                        }
+                                    }
+                                }
+                                if (attr.Values.Count > 0)
+                                {
+                                    foreach (var val in attr.Values)
+                                    {
+                                        //Πίνακας ATTIBUTETRANSH
+                                        using (var mtrattributeln = AttributeObj.GetTable("MTRATTRIBUTELN"))
+                                        {
+                                                mtrattributeln.Current.Append();
+                                                mtrattributeln.Current["CODE"] = val.Code;
+                                                mtrattributeln.Current["SOVALUE"] = val.Translations.Any() ? val.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description : val.Code;
+                                            if (val.Translations.Count > 0)
+                                            {
+                                                foreach (var trnsln in val.Translations.OrderBy(x=>x.LanguageCode))
+                                                {
+                                                    //Πίνακας ATTIBUTETRANSLN
+                                                    using (var attributetrnsln = AttributeObj.GetTable("ATTIBUTETRANSLN"))
+                                                    {
+                                                        attributetrnsln.Current.Append();
+                                                        attributetrnsln.Current["CCCLANGUAGE"] = trnsln.LanguageCode;
+                                                        attributetrnsln.Current["TRANSLATION"] = trnsln.Description;
+                                                        attributetrnsln.Current.Post();
+                                                    }
+                                                }
+                                            }
+                                            mtrattributeln.Current.Post();
+                                        }
+                                    }
+                                }
+                            }
+                            AttributeObj.PostData();
                         }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο Attribute «{diff.Attribute0Code}»." + ex.Message);
-                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _xSupport.Exception($"Πρόβλημα στο Attribute «{attr.Code}»." + ex.Message);
                     }
                 }
             }
         }
-
         public void CreateUpdateItems(List<ItemMasterRecord> exceldata, List<SqlData> sqlData)
         {
             var logs_remarks = "";

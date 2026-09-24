@@ -56,7 +56,7 @@ namespace MothercareImportData
         private List<AccountingTypeRecord> accountingTypes;
         private List<SimilarItemRecord> similarItems;
         private List<AddOnRecord> addOns;
-        private List<AttributeRecord> attributes;
+        private List<AttributeRecord> excelAttributes;
         private List<TagRecord> tags;
         private List<SizeGuideRecord> sizeGuides;
         private List<SeasonalityRecord> seasonalities;
@@ -198,7 +198,7 @@ namespace MothercareImportData
                             var intrastats = items.Select(i => i.Intrastat).Distinct().ToList();
                             if (intrastats.Count > 0)
                             {
-                                var differences = intrastats.Where(d => !intrastat_list.Any(s => s.Code == d.Substring(0, (d.Length>8 ? 8 : d.Length)))).ToList();
+                                var differences = intrastats.Where(d => !intrastat_list.Any(s => s.Code == d.Substring(0, (d.Length > 8 ? 8 : d.Length)))).ToList();
                                 if (differences.Count > 0)
                                 {
                                     newdata = true;
@@ -235,7 +235,7 @@ namespace MothercareImportData
                             //var test = existingItemCodes.Select(x => x.ItemCode).Distinct().ToList();
                             if (existingItemCodes.Count > 0)
                             {
-                                softoneService.ImportBarcode(existingItemCodes,item_list);
+                                softoneService.ImportBarcode(existingItemCodes, item_list);
                             }
                         }
                         break;
@@ -318,10 +318,6 @@ namespace MothercareImportData
                         }
                         break;
                     case 9:
-                        //    excelData = excelClient.ExportExcelData("Εμπορική Συλλογή");
-                        //    excelData.RemoveRange(0, numLinesToRemove);
-                        //    commercialCollections = ExcelFileService.GetExcelData<CommercialCollectionRecord>(excelData, firstLineInUse);
-                        //    break;
                         excelData = excelClient.ExportExcelData("Εμπορική Συλλογή");
                         excelData.RemoveRange(0, numLinesToRemove);
                         commercialCollections = ExcelFileService.GetExcelData<CommercialCollectionRecord>(excelData, firstLineInUse);
@@ -378,7 +374,7 @@ namespace MothercareImportData
                         excelData.RemoveRange(0, numLinesToRemove);
                         similarItems = ExcelFileService.GetExcelData<SimilarItemRecord>(excelData, firstLineInUse);
                         if (similarItems.Count > 0)
-                        { 
+                        {
                             softoneService.SetSimilarItems(similarItems, item_list);
                         }
                         break;
@@ -387,17 +383,18 @@ namespace MothercareImportData
                     //    excelData.RemoveRange(0, numLinesToRemove);
                     //    addOns = ExcelFileService.GetExcelData<AddOnRecord>(excelData, firstLineInUse);
                     //    break;
-                    case 16:
-                        excelData = excelClient.ExportExcelData("attributes");
-                        excelData.RemoveRange(0, numLinesToRemove);
-                        attributes = ExcelFileService.GetExcelData<AttributeRecord>(excelData, firstLineInUse);
-                        if (attributes.Count > 0)
-                        {
-                            var sqlAttributes = softoneService.GetSqlAttributeData();
-                            softoneService.CreateUpdateAttributes(attributes, sqlAttributes);
 
-                        }
-                        break;
+                    //case 16:
+                    //    excelData = excelClient.ExportExcelData("attributes");
+                    //    excelData.RemoveRange(0, numLinesToRemove);
+                    //    attributes = ExcelFileService.GetExcelData<AttributeRecord>(excelData, firstLineInUse);
+                    //    if (attributes.Count > 0)
+                    //    {
+                    //        var sqlAttributes = softoneService.GetSqlAttributeData();
+                    //        softoneService.CreateUpdateAttributes(attributes, sqlAttributes);
+
+                    //    }
+                    //    break;
                     //case 17:
                     //    excelData = excelClient.ExportExcelData("tags");
                     //    excelData.RemoveRange(0, numLinesToRemove);
@@ -451,6 +448,100 @@ namespace MothercareImportData
                             softoneService.UpdateSupBarcodes(supbarcodes);
                         }
                         break;
+                }
+
+                //Attributes, Tags, AddOns, SimilarItems δεν χρειάζονται να δημιουργούνται πριν τα Items γιατί δεν έχουν κωδικό είδους για να συνδεθούν. Θα δημιουργούνται μετά τα Items.
+                //Attributes
+                excelData = excelClient.ExportExcelData("attributes");
+                excelData.RemoveRange(0, numLinesToRemove);
+                excelAttributes = ExcelFileService.GetExcelData<AttributeRecord>(excelData, firstLineInUse);
+                if (excelAttributes.Count > 0)
+                {
+                    var softOneAttributes = softoneService.GetSqlAttributeData();
+                    var result = new List<AttributeRecord>();
+                    foreach (var excelAttribute in excelAttributes)
+                    {
+                        var softAttribute = softOneAttributes.FirstOrDefault(x =>string.Equals(x.Code, excelAttribute.Code,StringComparison.OrdinalIgnoreCase));
+                        // ==========================================
+                        // 1. Το Attribute δεν υπάρχει στο SoftOne
+                        // ==========================================
+                        if (softAttribute == null)
+                        {
+                            result.Add(excelAttribute);
+                            continue;
+                        }
+                        // ==========================================
+                        // 2. Το Attribute υπάρχει
+                        //    Δημιουργούμε record μόνο με τις διαφορές
+                        // ==========================================
+                        var difference = new AttributeRecord
+                        {
+                            Code = excelAttribute.Code,
+                            SoftOneId = softAttribute.SoftOneId
+                        };
+                        // ==========================================
+                        // 3. Σύγκριση Attribute Translations
+                        // ==========================================
+                        foreach (var excelTranslation in excelAttribute.Translations)
+                        {
+                            var softTranslation = softAttribute.Translations.FirstOrDefault(x =>x.LanguageCode == excelTranslation.LanguageCode);
+                            if (softTranslation == null ||
+                                !string.Equals(
+                                    softTranslation.Description,
+                                    excelTranslation.Description,
+                                    StringComparison.Ordinal))
+                            {
+                                difference.Translations.Add(excelTranslation);
+                            }
+                        }
+                        // ==========================================
+                        // 4. Σύγκριση Attribute Values
+                        // ==========================================
+                        foreach (var excelValue in excelAttribute.Values)
+                        {
+                            var softValue = softAttribute.Values.FirstOrDefault(x =>string.Equals(x.Code, excelValue.Code,StringComparison.OrdinalIgnoreCase));
+                            // Νέα τιμή
+                            if (softValue == null)
+                            {
+                                difference.Values.Add(excelValue);
+                                continue;
+                            }
+                            // ==========================================
+                            // 5. Η τιμή υπάρχει - σύγκριση translations
+                            // ==========================================
+                            var valueDifference = new AttributeValue
+                            {
+                                Code = excelValue.Code,
+                                SoftOneId = softValue.SoftOneId
+                            };
+                            foreach (var excelValueTranslation in excelValue.Translations)
+                            {
+                                var softValueTranslation = softValue.Translations.FirstOrDefault(x => x.LanguageCode == excelValueTranslation.LanguageCode);
+                                if (softValueTranslation == null || !string.Equals(softValueTranslation.Description,excelValueTranslation.Description,StringComparison.Ordinal))
+                                {
+                                    valueDifference.Translations.Add(
+                                        excelValueTranslation);
+                                }
+                            }
+                            // Κρατάμε το Value μόνο αν έχει κάποια διαφορά
+                            if (valueDifference.Translations.Count > 0)
+                            {
+                                difference.Values.Add(valueDifference);
+                            }
+                        }
+                        // ==========================================
+                        // 6. Κρατάμε το Attribute μόνο αν έχει διαφορά
+                        // ==========================================
+                        if (difference.Translations.Count > 0 ||
+                            difference.Values.Count > 0)
+                        {
+                            result.Add(difference);
+                        }
+                    }
+                    if(result.Count > 0)
+                    {
+                        softoneService.CreateUpdateAttributes(result);
+                    }
                 }
                 XSupport.Warning("Τέλος Εργασίας!");
                 XModule.CloseForm();
