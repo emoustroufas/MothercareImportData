@@ -118,6 +118,7 @@
     <Compile Include="Models\AccountingTypeRecord.cs" />
     <Compile Include="Models\AddOnRecord.cs" />
     <Compile Include="Models\AttributeRecord.cs" />
+    <Compile Include="Models\ProductAttributeRecord.cs" />
     <Compile Include="Models\BarcodeRecord.cs" />
     <Compile Include="Models\BrandRecord.cs" />
     <Compile Include="Models\BuRecord.cs" />
@@ -134,6 +135,7 @@
     <Compile Include="Models\SeasonalityRecord.cs" />
     <Compile Include="Models\SimilarItemRecord.cs" />
     <Compile Include="Models\SizeGuideRecord.cs" />
+    <Compile Include="Models\SizeRecord.cs" />
     <Compile Include="Models\SqlData.cs" />
     <Compile Include="Models\StatusRecord.cs" />
     <Compile Include="Models\SubdepartmentRecord.cs" />

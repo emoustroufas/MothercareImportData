@@ -12,6 +12,7 @@ namespace MothercareImportData.Models
         public int Id { get; set; }
         public string Code { get; set; }
         public string Name { get; set; }
+        public int Flg1 { get; set; }
     }
     public class SqlAttributeData
     {

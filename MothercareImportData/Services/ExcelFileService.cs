@@ -315,6 +315,21 @@ namespace MothercareImportData.Services
                     }
                 }
             }
+            else if (typeof(T) == typeof(SizeRecord))
+            {
+                foreach (var row in rows)
+                {
+                    var size = new SizeRecord();
+                    if (row.Columns.Any())
+                    {
+                        size.SizeGuideCode = FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "") : "";
+                        size.Code = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+                        size.Description = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
+                        size.OrderByNo =Convert.ToInt32(FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? (row.Columns[3] != "" ? row.Columns[3] : "0") : "0") : "0");
+                        result.Add((T)(object)size);
+                    }
+                }
+            }
             else if (typeof(T) == typeof(SizeGuideRecord))
             {
                 foreach (var row in rows)
@@ -421,6 +436,22 @@ namespace MothercareImportData.Services
                 }
                 result.AddRange((IEnumerable<T>)attributes);
                     //Add((T)(object)attributes);
+            }
+            else if (typeof(T) == typeof(ProductAttributeRecord))
+            {
+                foreach (var row in rows)
+                {
+                    var productAttribute = new ProductAttributeRecord();
+                    if (row.Columns.Any())
+                    {
+                        productAttribute.LanguageCode = Convert.ToInt32(FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? (row.Columns[0] != "" ? row.Columns[0] : "0") : "0") : "0");
+                        productAttribute.ProductCode = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+                        productAttribute.AttributeCode = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
+                        productAttribute.AttributeValueCode = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? row.Columns[3] : "") : "";
+                        productAttribute.FreeText = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? row.Columns[4] : "") : "";
+                        result.Add((T)(object)productAttribute);
+                    }
+                }
             }
             return result;
         }

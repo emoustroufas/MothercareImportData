@@ -12,4 +12,9 @@ namespace MothercareImportData.Models
         public string ItemCode { get; set; }//AP_EIDH_CD
         public string AddOnItemCode { get; set; }//AP_EIDH_CD_ADD
     }
+    public class AddOnGroup
+    {
+        public string ItemCode { get; set; }
+        public List<string> AddOnItemCodes { get; set; }
+    }
 }

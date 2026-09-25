@@ -62,6 +62,8 @@ namespace MothercareImportData
         private List<SeasonalityRecord> seasonalities;
         private List<HouseRecord> houses;
         private List<SupBarcodeRecord> supbarcodes;
+        private List<SizeRecord> sizes;
+        private List<ProductAttributeRecord> excelProductAttributes;
         public override void Initialize()
         {
             XModule.SetEvent("ON_CCCVMCIMPPARAMS_PATH", On_CccVMCImpParams_Path);
@@ -378,6 +380,20 @@ namespace MothercareImportData
                             softoneService.SetSimilarItems(similarItems, item_list);
                         }
                         break;
+                    case 15:
+                        excelData = excelClient.ExportExcelData("μεγέθη");
+                        excelData.RemoveRange(0, numLinesToRemove);
+                        sizes = ExcelFileService.GetExcelData<SizeRecord>(excelData, firstLineInUse);
+                        if (sizes.Count > 0)
+                        {
+                            var differences = sizes.Where(d => !size_list.Any(s => s.Code == d.Code)).ToList();
+                            if (differences.Count > 0)
+                            {
+                                softoneService.CreateSize(differences, sizeguide_list);
+                            }
+                        }
+                        break;
+
                     //case 15:
                     //    excelData = excelClient.ExportExcelData("add ons");
                     //    excelData.RemoveRange(0, numLinesToRemove);
@@ -450,6 +466,7 @@ namespace MothercareImportData
                         break;
                 }
 
+                //Eshop Data
                 //Attributes, Tags, AddOns, SimilarItems δεν χρειάζονται να δημιουργούνται πριν τα Items γιατί δεν έχουν κωδικό είδους για να συνδεθούν. Θα δημιουργούνται μετά τα Items.
                 //Attributes
                 excelData = excelClient.ExportExcelData("attributes");
@@ -543,13 +560,62 @@ namespace MothercareImportData
                         softoneService.CreateUpdateAttributes(result);
                     }
                 }
-                XSupport.Warning("Τέλος Εργασίας!");
-                XModule.CloseForm();
+                //Attributes per product
+                excelData = excelClient.ExportExcelData("attributes per product");
+                excelData.RemoveRange(0, numLinesToRemove);
+                excelProductAttributes = ExcelFileService.GetExcelData<ProductAttributeRecord>(excelData, firstLineInUse);
+                if (excelProductAttributes.Count > 0)
+                {
+                    var softOneAttributes = softoneService.GetSqlAttributeData();
+                    var softOneProductAttributes = softoneService.GetSqlProductAttributeData();
+                    var result = new List<ProductAttributeRecord>();
+                    foreach (var excel in excelProductAttributes)
+                    {
+                        var softOne = softOneProductAttributes.FirstOrDefault(x =>
+                            string.Equals(x.ProductCode, excel.ProductCode, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(x.AttributeCode, excel.AttributeCode, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(x.AttributeValueCode, excel.AttributeValueCode, StringComparison.OrdinalIgnoreCase) &&
+                            x.LanguageCode == excel.LanguageCode
+                        );
+
+                        // Δεν υπάρχει καθόλου στη βάση
+                        if (softOne == null)
+                        {
+                            result.Add(excel);
+                            continue;
+                        }
+
+                        // Υπάρχει αλλά έχει διαφορετική περιγραφή
+                        if (!string.Equals(
+                                softOne.FreeText?.Trim(),
+                                excel.FreeText?.Trim(),
+                                StringComparison.Ordinal))
+                        {
+                            result.Add(excel);
+                        }
+                    }
+                    if (result.Count > 0)
+                    {
+                        softoneService.CreateUpdateProductAttributes(result,sqlData,softOneAttributes);
+                    }
+                }
+
+                //AddOns
+                excelData = excelClient.ExportExcelData("add ons");
+                excelData.RemoveRange(0, numLinesToRemove);
+                addOns = ExcelFileService.GetExcelData<AddOnRecord>(excelData, firstLineInUse);
+                if (addOns.Count > 0)
+                {
+                    softoneService.SetAddOns(addOns, item_list);
+                }
             }
             catch (Exception ex)
             {
                 XSupport.Exception(ex.Message);
             }
+
+            XSupport.Warning("Τέλος Εργασίας!");
+            XModule.CloseForm();
         }
     }
 
