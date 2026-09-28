@@ -115,9 +115,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="McImpData.cs" />
+    <Compile Include="McImpDataEshop.cs" />
     <Compile Include="Models\AccountingTypeRecord.cs" />
     <Compile Include="Models\AddOnRecord.cs" />
     <Compile Include="Models\AttributeRecord.cs" />
+    <Compile Include="Models\ItemTextsRecord.cs" />
+    <Compile Include="Models\NidRecord.cs" />
     <Compile Include="Models\ProductAttributeRecord.cs" />
     <Compile Include="Models\BarcodeRecord.cs" />
     <Compile Include="Models\BrandRecord.cs" />

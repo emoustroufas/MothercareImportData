@@ -4,9 +4,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
-using NPOI.SS.UserModel;
-using System.Text;
-using System.Threading.Tasks;
 using MothercareImportData.Models;
 
 namespace MothercareImportData.Services

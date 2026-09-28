@@ -10,9 +10,13 @@ namespace MothercareImportData.Models
     {
         public string Code { get; set; }//CD
         public string Description { get; set; }//PERI
-        public string ItemCode { get; set; }//AP_EIDH_CD
+        public List<TagItems> Items { get; set; }   
         public DateTime? DateFrom { get; set; }//HMER_APO
         public DateTime? DateTo { get; set; }//HMER_EOS
         public bool Active { get; set; }//ENERG_SW
+    }
+    public class TagItems
+    {
+        public string ItemCode { get; set; }//AP_EIDH_CD
     }
 }

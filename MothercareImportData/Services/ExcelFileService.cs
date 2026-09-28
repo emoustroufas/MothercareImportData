@@ -1,6 +1,9 @@
 ﻿using MothercareImportData.Models;
 using MothercareImportData.Utils;
 using NPOI.Util;
+using NSAX.Helpers;
+using Org.BouncyCastle.Asn1.Cms;
+using SixLabors.Fonts;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -298,23 +301,23 @@ namespace MothercareImportData.Services
             //        }
             //    }
             //}
-            else if (typeof(T) == typeof(TagRecord))
-            {
-                foreach (var row in rows)
-                {
-                    var tag = new TagRecord();
-                    if (row.Columns.Any())
-                    {
-                        tag.Code = FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "") : "";
-                        tag.Description = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
-                        tag.ItemCode = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
-                        tag.DateFrom = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? (DateTime?)Convert.ToDateTime(row.Columns[3]) : null) : null;
-                        tag.DateTo = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? (DateTime?)Convert.ToDateTime(row.Columns[4]) : null) : null;
-                        tag.Active = FileUtil.InBounds(5, row.Columns) ? (row.Columns.Count > 5 ? Convert.ToBoolean(row.Columns[5]) : false) : false;
-                        result.Add((T)(object)tag);
-                    }
-                }
-            }
+            //else if (typeof(T) == typeof(TagRecord))
+            //{
+            //    foreach (var row in rows)
+            //    {
+            //        var tag = new TagRecord();
+            //        if (row.Columns.Any())
+            //        {
+            //            tag.Code = FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "") : "";
+            //            tag.Description = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+            //            tag.ItemCode = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
+            //            tag.DateFrom = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? (DateTime?)Convert.ToDateTime(row.Columns[3]) : null) : null;
+            //            tag.DateTo = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? (DateTime?)Convert.ToDateTime(row.Columns[4]) : null) : null;
+            //            tag.Active = FileUtil.InBounds(5, row.Columns) ? (row.Columns.Count > 5 ? Convert.ToBoolean(row.Columns[5]) : false) : false;
+            //            result.Add((T)(object)tag);
+            //        }
+            //    }
+            //}
             else if (typeof(T) == typeof(SizeRecord))
             {
                 foreach (var row in rows)
@@ -325,7 +328,7 @@ namespace MothercareImportData.Services
                         size.SizeGuideCode = FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "") : "";
                         size.Code = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
                         size.Description = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
-                        size.OrderByNo =Convert.ToInt32(FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? (row.Columns[3] != "" ? row.Columns[3] : "0") : "0") : "0");
+                        size.OrderByNo = Convert.ToInt32(FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? (row.Columns[3] != "" ? row.Columns[3] : "0") : "0") : "0");
                         result.Add((T)(object)size);
                     }
                 }
@@ -369,7 +372,6 @@ namespace MothercareImportData.Services
                     }
                 }
             }
-
             else if (typeof(T) == typeof(SupBarcodeRecord))
             {
                 foreach (var row in rows)
@@ -383,7 +385,6 @@ namespace MothercareImportData.Services
                     }
                 }
             }
-
             else if (typeof(T) == typeof(Models.AttributeRecord))
             {
                 List<AttributeRecord> attributes = new List<AttributeRecord>();
@@ -435,7 +436,7 @@ namespace MothercareImportData.Services
                     }
                 }
                 result.AddRange((IEnumerable<T>)attributes);
-                    //Add((T)(object)attributes);
+                //Add((T)(object)attributes);
             }
             else if (typeof(T) == typeof(ProductAttributeRecord))
             {
@@ -452,6 +453,129 @@ namespace MothercareImportData.Services
                         result.Add((T)(object)productAttribute);
                     }
                 }
+            }
+            else if (typeof(T) == typeof(ItemTextsRecord))
+            {
+                List<ItemTextsRecord> itemTexts = new List<ItemTextsRecord>();
+                foreach (var row in rows)
+                {
+                    var langCode = Convert.ToInt32(FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? (row.Columns[0] != "" ? row.Columns[0] : "0") : "0") : "0");
+                    var itemCode = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+                    var labalTitle = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
+                    var labalDescription = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? row.Columns[3] : "") : "";
+                    var eshopTitle = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? row.Columns[4] : "") : "";
+                    var smallDescription = FileUtil.InBounds(5, row.Columns) ? (row.Columns.Count > 5 ? row.Columns[5] : "") : "";
+                    var featureAndBenefits = FileUtil.InBounds(6, row.Columns) ? (row.Columns.Count > 6 ? row.Columns[6] : "") : "";
+                    //var longDescription = FileUtil.InBounds(7, row.Columns) ? (row.Columns.Count > 7 ? row.Columns[7] : "") : "";
+                    // Βρίσκουμε ή δημιουργούμε το κείμενο του προϊόντος
+                    ItemTextsRecord itemText = itemTexts.FirstOrDefault(x => x.ItemCode == itemCode);
+                    if (itemText == null)
+                    {
+                        itemText = new ItemTextsRecord
+                        {
+                            ItemCode = itemCode,
+                            Texts = new List<TextsTranslation>()
+                        };
+                        itemTexts.Add(itemText);
+                    }
+                    // Προσθέτουμε τη μετάφραση του κείμενο του προϊόντος
+                    if (!itemText.Texts.Any(x => x.LanguageCode == langCode))
+                    {
+                        itemText.Texts.Add(new TextsTranslation
+                        {
+                            LanguageCode = langCode,
+                            LabelTitle = labalTitle,
+                            LabelDescription = labalDescription,
+                            EshopTitle = eshopTitle,
+                            SmallDescription = smallDescription,
+                            FeaturesAndBenefits = featureAndBenefits,
+                            //LongDescription = longDescription
+                        });
+                    }
+                }
+                result.AddRange((IEnumerable<T>)itemTexts);
+            }
+            else if (typeof(T) == typeof(TagRecord))
+            {
+                List<TagRecord> tagRecords = new List<TagRecord>();
+                foreach (var row in rows)
+                {
+                    var tagCode = FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "") : "";
+                    var tagDescription = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+                    var itemCode = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
+                    var dateFrom = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? (DateTime?)Convert.ToDateTime(row.Columns[3]) : null) : null;
+                    var dateTo = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? (DateTime?)Convert.ToDateTime(row.Columns[4]) : null) : null;
+                    var isactive = Convert.ToInt32(FileUtil.InBounds(5, row.Columns) ? (row.Columns.Count > 5 ? (row.Columns[5] != "" ? row.Columns[5] : "0") : "0") : "0");
+                    var active = isactive > 0 ? true : false;
+                    // Βρίσκουμε ή δημιουργούμε το TagRecord
+                    TagRecord tagRecord = tagRecords.FirstOrDefault(x => x.Code == tagCode);
+                    if (tagRecord == null)
+                    {
+                        tagRecord = new TagRecord
+                        {
+                            Code = tagCode,
+                            Description = tagDescription,
+                            Items = new List<TagItems>(),
+                            DateFrom = dateFrom,
+                            DateTo = dateTo,
+                            Active = active
+                        };
+                        tagRecords.Add(tagRecord);
+                    }
+                    // Προσθέτουμε το Item στον TagRecord
+                    if (!tagRecord.Items.Any(x => x.ItemCode == itemCode))
+                    {
+                        tagRecord.Items.Add(new TagItems
+                        {
+                            ItemCode = itemCode
+                        });
+                    }
+                }
+                result.AddRange((IEnumerable<T>)tagRecords);
+            }
+            else if (typeof(T) == typeof(NidRecord))
+            {
+                List<NidRecord> nidRecords = new List<NidRecord>();
+                foreach (var row in rows)
+                {
+                    var storeId = Convert.ToInt32(FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? (row.Columns[0] != "" ? row.Columns[0] : "0") : "0") : "0");
+                    var itemCode = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+                    var nid = Convert.ToInt32(FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? (row.Columns[2] != "" ? row.Columns[2] : "0") : "0") : "0");
+
+                    DateTime? insdate = null;
+                    if (FileUtil.InBounds(3, row.Columns) && row.Columns.Count > 3)
+                    {
+                        var value = row.Columns[3]?.ToString();
+
+                        if (!string.IsNullOrWhiteSpace(value) &&
+                            DateTime.TryParse(value, out DateTime parsedDate))
+                        {
+                            insdate = parsedDate;
+                        }
+                    }
+                    // Βρίσκουμε ή δημιουργούμε το NidRecord
+                    NidRecord nidRecord = nidRecords.FirstOrDefault(x => x.ItemCode == itemCode);
+                    if (nidRecord == null)
+                    {
+                        nidRecord = new NidRecord
+                        {
+                            ItemCode = itemCode,
+                            NidStores = new List<NidStores>()
+                        };
+                        nidRecords.Add(nidRecord);
+                    }
+                    // Προσθέτουμε το NidStores στον NidRecord
+                    if (!nidRecord.NidStores.Any(x => x.StoreId == storeId))
+                    {
+                        nidRecord.NidStores.Add(new NidStores
+                        {
+                            StoreId = storeId,
+                            Nid = nid,
+                            InsDate = insdate ?? DateTime.MinValue
+                        });
+                    }
+                }
+                result.AddRange((IEnumerable<T>)nidRecords);
             }
             return result;
         }

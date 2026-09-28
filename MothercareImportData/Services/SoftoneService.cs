@@ -6,18 +6,23 @@ using Softone;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace MothercareImportData.Services
 {
     public class SoftoneService
     {
         private XSupport _xSupport;
-        public SoftoneService(XSupport xSupport)
+        private XModule _xModule;
+        public SoftoneService(XSupport xSupport, XModule xModule)
         {
             _xSupport = xSupport;
+            _xModule = xModule;
         }
         public List<SqlData> GetSqlData()
         {
@@ -73,7 +78,6 @@ namespace MothercareImportData.Services
                 }
             }
         }
-
         public List<ProductAttributeRecord> GetSqlProductAttributeData()
         {
             var sqldata = new List<ProductAttributeRecord>();
@@ -127,7 +131,96 @@ namespace MothercareImportData.Services
                 throw new Exception(ex.Message);
             }
         }
-
+        public List<AttributeRecord> GetSqlAttributeData2()
+        {
+            var sqldata = new List<AttributeRecord>();
+            try
+            {
+                var query = $@"SELECT A.MTRATTRIBUTE, A.CODE AS AttributeCode, 
+                            AT.CCCLANGUAGE AS AttributeLanguageCode,AT.TRANSLATION AS AttributeTranslation,
+                            V.MTRATTRIBUTELN,V.CODE AS ValueCode,
+                            VT.CCCLANGUAGE AS ValueLanguageCode,VT.TRANSLATION AS ValueTranslation
+                            FROM MTRATTRIBUTE A
+                            LEFT JOIN CCCATTIBUTETRANSLATION AT ON AT.MTRATTRIBUTE = A.MTRATTRIBUTE AND AT.COMPANY = A.COMPANY AND ISNULL(AT.CCCLANGUAGE, 0) <> 0 AND AT.DATATYPE = 1
+                            LEFT JOIN MTRATTRIBUTELN V ON V.MTRATTRIBUTE = A.MTRATTRIBUTE AND V.COMPANY = A.COMPANY AND V.ISACTIVE = 1
+                            LEFT JOIN CCCATTIBUTETRANSLATION VT ON VT.MTRATTRIBUTE = V.MTRATTRIBUTE AND VT.MTRATTRIBUTELN = V.MTRATTRIBUTELN AND VT.COMPANY = V.COMPANY AND ISNULL(VT.CCCLANGUAGE, 0) <> 0 AND VT.DATATYPE = 2
+                            WHERE A.COMPANY = {_xSupport.ConnectionInfo.CompanyId} AND A.ISACTIVE = 1
+                            ORDER BY A.MTRATTRIBUTE,V.MTRATTRIBUTELN,AT.CCCLANGUAGE,VT.CCCLANGUAGE";
+                using (var ds = _xSupport.GetSQLDataSet(query, null))
+                {
+                    for (int i = 0; i < ds.Count; i++)
+                    {
+                        int attributeId = ds.GetAsInteger(i, "MTRATTRIBUTE");
+                        string attributeCode = ds.GetAsString(i, "AttributeCode");
+                        // ==========================================
+                        // Attribute
+                        // ==========================================
+                        var attribute = sqldata.FirstOrDefault(x => x.SoftOneId == attributeId);
+                        if (attribute == null)
+                        {
+                            attribute = new AttributeRecord
+                            {
+                                SoftOneId = attributeId,
+                                Code = attributeCode
+                            };
+                            sqldata.Add(attribute);
+                        }
+                        // ==========================================
+                        // Attribute Translation
+                        // ==========================================
+                        int attributeLanguage = ds.GetAsInteger(i, "AttributeLanguageCode");
+                        string attributeDescription = ds.GetAsString(i, "AttributeTranslation");
+                        if (attributeLanguage != 0 && !attribute.Translations.Any(x => x.LanguageCode == attributeLanguage) && attributeDescription != "")
+                        {
+                            attribute.Translations.Add(
+                                new AttributeTranslation
+                                {
+                                    LanguageCode = attributeLanguage,
+                                    Description = attributeDescription
+                                });
+                        }
+                        // ==========================================
+                        // Attribute Values
+                        // ==========================================
+                        int valueId = ds.GetAsInteger(i, "MTRATTRIBUTELN");
+                        if (valueId == 0)
+                            continue;
+                        string valueCode = ds.GetAsString(i, "ValueCode");
+                        var attributeValue = attribute.Values.FirstOrDefault(x => x.SoftOneId == valueId);
+                        if (attributeValue == null)
+                        {
+                            attributeValue = new AttributeValue
+                            {
+                                SoftOneId = valueId,
+                                Code = valueCode
+                            };
+                            attribute.Values.Add(attributeValue);
+                        }
+                        // ==========================================
+                        // Attribute Value Translation
+                        // ==========================================
+                        int valueLanguage = ds.GetAsInteger(i, "ValueLanguageCode");
+                        string valueDescription = ds.GetAsString(i, "ValueTranslation");
+                        if (valueLanguage != 0 && !attributeValue.Translations.Any(x => x.LanguageCode == valueLanguage) && valueDescription != "")
+                        {
+                            attributeValue.Translations.Add(
+                                new AttributeValueTranslation
+                                {
+                                    LanguageCode = valueLanguage,
+                                    Description = valueDescription
+                                });
+                        }
+                    }
+                }
+                //var test = sqldata.OrderBy(x => x.Code);
+                return sqldata;
+            }
+            catch (Exception ex)
+            {
+                return sqldata;
+                throw new Exception(ex.Message);
+            }
+        }
         public List<AttributeRecord> GetSqlAttributeData()
         {
             var sqldata = new List<AttributeRecord>();
@@ -258,6 +351,63 @@ namespace MothercareImportData.Services
                 throw new Exception(ex.Message);
             }
         }
+        public List<NidRecord> GetNids()
+        {
+            var sqldata = new List<NidRecord>();
+            try
+            {
+                var query = "SELECT M.MTRL,I.STORE,M.CODE,I.NID,I.INSDATE FROM MTRL M INNER JOIN CCCNID I ON I.MTRL=M.MTRL";
+                using (var ds = _xSupport.GetSQLDataSet(query, null))
+                {
+                    try
+                    {
+                        if (ds.Count > 0)
+                        {
+                            for (int i = 0; i < ds.Count; i++)
+                            {
+                                var itemCode = ds.GetAsString(i, "CODE");
+                                var storeId = ds.GetAsInteger(i, "STORE");
+                                var nid = ds.GetAsInteger(i, "NID");
+                                var insdate = ds.GetAsDateTime(i, "INSDATE");
+                                NidRecord nidRecord = sqldata.FirstOrDefault(x => x.ItemCode == itemCode);
+                                if (nidRecord == null)
+                                {
+                                    nidRecord = new NidRecord
+                                    {
+                                        ItemCode = itemCode,
+                                        NidStores = new List<NidStores>()
+                                    };
+                                    sqldata.Add(nidRecord);
+                                }
+                                // Προσθέτουμε το NidStores στον NidRecord
+                                if (!nidRecord.NidStores.Any(x => x.StoreId == storeId))
+                                {
+                                    nidRecord.NidStores.Add(new NidStores
+                                    {
+                                        StoreId = storeId,
+                                        Nid = nid,
+                                        InsDate = insdate
+                                    });
+                                }
+                            }
+                        }
+                        return sqldata;
+                    }
+                    catch (Exception ex)
+                    {
+                        return sqldata;
+                        throw new Exception(ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return sqldata;
+                throw new Exception(ex.Message);
+            }
+        }
+
+
         public void CreateSizeGuide(List<SizeGuideRecord> exceldata)
         {
             if (exceldata.Count() > 0)
@@ -1080,6 +1230,7 @@ namespace MothercareImportData.Services
                                                     //Πίνακας ATTIBUTETRANSLN
                                                     using (var attributetrnsln = AttributeObj.GetTable("ATTIBUTETRANSLN"))
                                                     {
+                                                        var test = attributetrnsln.JSON();
                                                         var recNo1 = attributetrnsln.Find("MTRATTRIBUTE;MTRATTRIBUTELN;CCCLANGUAGE", attributeId, attributelnId, trnsln.LanguageCode);
                                                         if (recNo1 != -1)
                                                         {
@@ -1254,6 +1405,200 @@ namespace MothercareImportData.Services
                                         //
                                         mtrattributes.Current.Post();
                                         //prepei na diagrafo auta pou den vrisko?
+                                    }
+                                }
+                            }
+                            ItemObj.PostData();
+                        }
+                    }
+                }
+            }
+        }
+        public void SetItemTexts(List<ItemTextsRecord> exceldata, List<SqlData> item_list)
+        {
+            if (exceldata.Count() > 0)
+            {
+                try
+                {
+                    foreach (var text in exceldata)
+                    {
+                        try
+                        {
+                            var mtrl_list = item_list.Where(x => x.Code.Trim() == text.ItemCode.Trim()).FirstOrDefault();
+                            var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
+                            var mname = mtrl_list != null ? mtrl_list.Name : "";
+                            if (mtrl > 0)
+                            {
+                                using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                                {
+                                    ItemObj.LocateData(mtrl);
+                                    using (var descriptions = ItemObj.GetTable("CCCDESCRIPTIONS"))
+                                    {
+                                        foreach (var trns in text.Texts)
+                                        {
+                                            var recTrNo1 = -1;
+                                            for (var i  = 0; i < descriptions.Count; i++)
+                                            {
+                                                var testlang = Convert.ToInt32(descriptions[i, "CCCLANGUAGE"]);
+                                                if (testlang == trns.LanguageCode)
+                                                {
+                                                    recTrNo1 = i;
+                                                    break;
+                                                }
+                                            }
+                                            descriptions.Current.Edit(recTrNo1);
+                                            //var recTrNo1 = descriptions.Find("MTRL;CCCLANGUAGE",mtrl, trns.LanguageCode);
+                                            if (recTrNo1 != -1)
+                                            {
+                                                descriptions.Current["CCCLANGUAGE"] = trns.LanguageCode;
+                                                descriptions.Current["ESHOPTITLE"] = trns.EshopTitle;
+                                                descriptions.Current["SMALLDESCR"] = trns.SmallDescription;
+                                                descriptions.Current["BIGDESCR"] = trns.LongDescription;
+                                                descriptions.Current["LABALTITLE"] = trns.LabelTitle;
+                                                descriptions.Current["LABALDESCR"] = trns.LabelDescription;
+                                                var textfeaturesandbenefits = trns.FeaturesAndBenefits;
+                                                var ishtml = Regex.IsMatch(textfeaturesandbenefits, @"<\s*(html|body|p|div|span|br|strong|b|i|em|ul|ol|li|table|tr|td|a|img|h[1-6])\b[^>]*>",RegexOptions.IgnoreCase);
+                                                if (!ishtml)
+                                                {
+                                                    textfeaturesandbenefits = System.Net.WebUtility.HtmlEncode(textfeaturesandbenefits);
+                                                    textfeaturesandbenefits = textfeaturesandbenefits.Replace("\r\n", "<br>").Replace("\n", "<br>").Replace("\r", "<br>");
+                                                    textfeaturesandbenefits = $"<p>{textfeaturesandbenefits}</p>";
+                                                }
+                                                var vBlobField = _xModule.Exec("CODE:ModuleIntf.GetField", descriptions.TablePtr, "FEATURESBENEFITSHTML");
+                                                var vBlobPointer = _xModule.Exec("CODE:SOHTMLDOC.CreateDoc", 1, textfeaturesandbenefits);
+                                                _xModule.Exec("CODE:SOHTMLDOC.SaveDoctoBlob", vBlobPointer, vBlobField);
+                                                descriptions.Current["FEATURESBENEFITSTXT"] = textfeaturesandbenefits;
+                                            }
+                                            else
+                                            {
+                                                descriptions.Current.Append();
+                                                descriptions.Current["CCCLANGUAGE"] = trns.LanguageCode;
+                                                descriptions.Current["ESHOPTITLE"] = trns.EshopTitle;
+                                                descriptions.Current["SMALLDESCR"] = trns.SmallDescription;
+                                                descriptions.Current["BIGDESCR"] = trns.LongDescription;
+                                                descriptions.Current["LABALTITLE"] = trns.LabelTitle;
+                                                descriptions.Current["LABALDESCR"] = trns.LabelDescription;
+                                                var textfeaturesandbenefits = trns.FeaturesAndBenefits;
+                                                var ishtml = Regex.IsMatch(textfeaturesandbenefits, @"<\s*(html|body|p|div|span|br|strong|b|i|em|ul|ol|li|table|tr|td|a|img|h[1-6])\b[^>]*>", RegexOptions.IgnoreCase);
+                                                if (!ishtml)
+                                                {
+                                                    textfeaturesandbenefits = System.Net.WebUtility.HtmlEncode(textfeaturesandbenefits);
+                                                    textfeaturesandbenefits = textfeaturesandbenefits.Replace("\r\n", "<br>").Replace("\n", "<br>").Replace("\r", "<br>");
+                                                    textfeaturesandbenefits = $"<p>{textfeaturesandbenefits}</p>";
+                                                }
+                                                var vBlobField = _xModule.Exec("CODE:ModuleIntf.GetField", descriptions.TablePtr, "FEATURESBENEFITSHTML");
+                                                var vBlobPointer = _xModule.Exec("CODE:SOHTMLDOC.CreateDoc", 1, textfeaturesandbenefits);
+                                                _xModule.Exec("CODE:SOHTMLDOC.SaveDoctoBlob", vBlobPointer, vBlobField);
+                                                descriptions.Current["FEATURESBENEFITSTXT"] = textfeaturesandbenefits;
+                                            }
+                                            descriptions.Current.Post();
+                                        }
+                                    }
+                                    ItemObj.PostData();
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _xSupport.Exception($"Πρόβλημα στο κείμενο Είδους «{text.ItemCode}»." + ex.Message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _xSupport.Exception(ex.Message);
+                }
+            }
+        }
+
+        public void CreateTag(List<TagRecord> exceldata, List<SqlData> item_list)
+        {
+            if (exceldata.Count > 0)
+            { 
+                foreach(var tag in exceldata)
+                {
+                    var code = tag.Code;
+                    var name = tag.Description;
+                    var fromdate = tag.DateFrom;
+                    var todate = tag.DateTo;
+                    var isactive = tag.Active;
+                    var itemlist = tag.Items;
+                    var checkitems = itemlist.Where(x => item_list.Any(z => z.Code.Trim() == x.ItemCode.Trim())).ToList();
+                    if (checkitems.Count > 0)
+                    {
+                        try
+                        {
+                            using (var ImpObj = _xSupport.CreateModule("CCCTAGS"))
+                            {
+                                ImpObj.InsertData();
+                                ImpObj.GetTable("CCCTAGS").Current["ISACTIVE"] = isactive ? 1 : 0;
+                                ImpObj.GetTable("CCCTAGS").Current["CODE"] = code;
+                                ImpObj.GetTable("CCCTAGS").Current["NAME"] = name;
+                                ImpObj.GetTable("CCCTAGS").Current["FROMDATE"] = fromdate;
+                                ImpObj.GetTable("CCCTAGS").Current["TODATE"] = todate;
+                                if (checkitems.Count > 0)
+                                {
+                                    using (var tagsnl = ImpObj.GetTable("CCCTAGSNL"))
+                                    {
+                                        foreach (var item in checkitems)
+                                        {
+                                            var mtrl = item_list.Where(x => x.Code.Trim() == item.ItemCode.Trim()).FirstOrDefault()?.Id ?? 0;
+                                            if (mtrl > 0)
+                                            {
+                                                var recNo1 = tagsnl.Find("MTRL", mtrl);
+                                                if (recNo1 == -1)
+                                                {
+                                                    tagsnl.Current.Append();
+                                                    tagsnl.Current["MTRL"] = mtrl;
+                                                    tagsnl.Current.Post();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                ImpObj.PostData();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _xSupport.Exception($"Πρόβλημα στο Tag «{code}»." + ex.Message);
+                        }
+                    }
+                }
+            }
+        }
+        public void SetNid (List<NidRecord> exceldata, List<SqlData> item_list)
+        { 
+            if(exceldata.Count > 0)
+            {
+                foreach (var nid in exceldata)
+                { 
+                    var itemcode = nid.ItemCode;
+                    var mtrl = item_list.Where(x => x.Code.Trim() == itemcode.Trim()).FirstOrDefault()?.Id ?? 0;
+                    if (mtrl > 0)
+                    {
+                        using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                        {
+                            ItemObj.LocateData(mtrl);
+                            using (var mtrnid = ItemObj.GetTable("CCCNID"))
+                            {
+                                foreach (var store in nid.NidStores)
+                                {
+                                    var storeId = store.StoreId;
+                                    var recNo1 = mtrnid.Find("STORE", storeId);
+                                    if (recNo1 == -1)
+                                    {
+                                        mtrnid.Current.Append();
+                                        mtrnid.Current["STORE"] = storeId;
+                                        mtrnid.Current["NID"] = store.Nid;
+                                        mtrnid.Current["INSDATE"] = store.InsDate;
+                                        mtrnid.Current.Post();
+                                    }
+                                    else
+                                    {
+                                        mtrnid.Current["NID"] = store.Nid;
+                                        mtrnid.Current["INSDATE"] = store.InsDate;
+                                        mtrnid.Current.Post();
                                     }
                                 }
                             }

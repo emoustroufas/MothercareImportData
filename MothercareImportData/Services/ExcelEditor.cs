@@ -110,6 +110,7 @@ namespace MothercareImportData.Services
                 var activeshhet = XlsxWorkBook != null ? XlsxWorkBook.ActiveSheetIndex : XlsWorkBook.ActiveSheetIndex;
                 sheet = XlsxWorkBook != null ? XlsxWorkBook.GetSheetAt(activeshhet) : XlsWorkBook.GetSheetAt(activeshhet);
                 //throw new Exception($"Δεν υπάρχει φύλλο εργασίας με όνομα «{sheetName}» στο επιλεγμένο αρχείο προς εισαγωγή.Διορθώστε τη τιμή του πεδίου «Όνομα Φύλλου» με το αντίστοιχο του φύλλου, από το αρχείο που θέλετε να εισάγετε.");
+                return retData;
             }
             for (int rowIndex = 0; rowIndex <= sheet.LastRowNum; rowIndex++)
             {
