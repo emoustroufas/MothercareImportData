@@ -12,5 +12,7 @@ namespace MothercareImportData.Models
         public string Description { get; set; }//PERI
         public string SizeGuideCode { get; set; }//AP_MEGE0_CD
         public int OrderByNo { get; set; }//ORDER_BY
+        public string Attribute29ValueCode { get; set; }
+        public string Attribute51ValueCode { get; set; }
     }
 }

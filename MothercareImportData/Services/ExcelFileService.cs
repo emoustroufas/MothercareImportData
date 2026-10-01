@@ -329,6 +329,8 @@ namespace MothercareImportData.Services
                         size.Code = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
                         size.Description = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
                         size.OrderByNo = Convert.ToInt32(FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? (row.Columns[3] != "" ? row.Columns[3] : "0") : "0") : "0");
+                        size.Attribute29ValueCode = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? row.Columns[4] : "") : "";
+                        size.Attribute51ValueCode = FileUtil.InBounds(5, row.Columns) ? (row.Columns.Count > 5 ? row.Columns[5] : "") : "";
                         result.Add((T)(object)size);
                     }
                 }

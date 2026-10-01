@@ -1,5 +1,8 @@
 ﻿using MothercareImportData.Models;
 using NPOI.HSSF.Record;
+using NPOI.POIFS.Crypt.Dsig;
+using NPOI.SS.Formula.Functions;
+using NPOI.SS.UserModel;
 using Org.BouncyCastle.Asn1.Cms;
 using SixLabors.ImageSharp;
 using Softone;
@@ -8,10 +11,12 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using static Org.BouncyCastle.Crypto.Engines.SM2Engine;
 
 namespace MothercareImportData.Services
 {
@@ -23,6 +28,39 @@ namespace MothercareImportData.Services
         {
             _xSupport = xSupport;
             _xModule = xModule;
+        }
+        public void MarkStage(int number)
+        {
+            var results = _xModule.GetTable("RESULTS");
+            //results.Current.Edit(0);
+            results.Current["STAGE"] = number;
+            results.Resync();
+            _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 0, results.TablePtr);
+            results.Current["STAGE"] = 4; //Χρειάζεται ένα στάδιο που δεν υπάρχει για να μην ξαναγράφει
+        }
+        public void ProgressNotify(int prmode, int prvalue)
+        {
+            var results = _xModule.GetTable("RESULTS");
+            //results.Current.Edit(0);
+            switch (prmode)
+            {
+                case 0:
+                    results.Current["STARTSTOP"] = prvalue;
+                    break;
+                case 1:
+                    results.Current["STARTSTOP"] = prvalue;
+                    break;
+                case 2:
+                    results.Current["TOTREC"] = prvalue;
+                    break;
+                case 3:
+                    results.Current["CURREC"] = prvalue;
+                    break;
+            }
+            results.Resync();
+            _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 0, results.TablePtr);
+            //X.EXEC('CODE:ModuleIntf.SENDRESPONSE', X.MODULE, 0, RESULTS);
+            results.Current["STAGE"] = 4;
         }
         public List<SqlData> GetSqlData()
         {
@@ -78,18 +116,1268 @@ namespace MothercareImportData.Services
                 }
             }
         }
+        public List<BarcodeRecord> GetSqlBarcodes()
+        {
+            var barcodes = new List<BarcodeRecord>();
+            var query = $@"SELECT MS.CODE AS BARCODE,M.CODE FROM MTRL M INNER JOIN MTRSUBSTITUTE MS ON MS.MTRL=M.MTRL WHERE M.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND M.SODTYPE=51 AND M.CCCITEMCOMPANY IN (0,2)";
+            using (var ds = _xSupport.GetSQLDataSet(query, null))
+            {
+                try
+                {
+                    if (ds.Count > 0)
+                    {
+                        for (int i = 0; i < ds.Count; i++)
+                        {
+                            var res = new BarcodeRecord
+                            {
+                                Barcode = ds.GetAsString(i, "BARCODE"),
+                                ItemCode = ds.GetAsString(i, "CODE")
+                            };
+                            barcodes.Add(res);
+                        }
+                    }
+                    return barcodes;
+                }
+                catch (Exception ex)
+                {
+                    return barcodes;
+                    throw new Exception(ex.Message);
+                }
+            }
+        }
+        public List<SimilarItemRecord> GetSqlSimilarItems()
+        { 
+            var similaritems = new List<SimilarItemRecord>();
+            var query = $@"SELECT M1.CODE AS ITEMCODE,M2.CODE AS REFERENCEITEMCODE FROM CCCSIMILARITEMS S
+                            LEFT JOIN MTRL M1 ON M1.MTRL =S.MTRL LEFT JOIN MTRL M2 ON M2.MTRL = S.SIMMTRL
+                            WHERE S.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND M2.CODE IS NOT NULL AND M1.CODE IS NOT NULL";
+            using (var ds = _xSupport.GetSQLDataSet(query, null))
+            {
+                try
+                {
+                    if (ds.Count > 0)
+                    {
+                        for (int i = 0; i < ds.Count; i++)
+                        {
+                            var res = new SimilarItemRecord
+                            {
+                                ItemCode = ds.GetAsString(i, "ITEMCODE"),
+                                ReferenceItemCode = ds.GetAsString(i, "REFERENCEITEMCODE")
+                            };
+                            similaritems.Add(res);
+                        }
+                    }
+                    return similaritems;
+                }
+                catch (Exception ex)
+                {
+                    return similaritems;
+                    throw new Exception(ex.Message);
+                }
+            }
+        }
+        public string CreateDivision(List<DivisionRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCDIVISION"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCDIVISION").Current["CODE"] = exdcode.ToString();
+                            ImpObj.GetTable("CCCDIVISION").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCDIVISION").Current["NAMEENG"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCDIVISION").Current["ISACTIVE"] = 1;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Division «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateDepartment(List<DepartmentRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCDEPARTMENT"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCDEPARTMENT").Current["CODE"] = exdcode.ToString();
+                            ImpObj.GetTable("CCCDEPARTMENT").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCDEPARTMENT").Current["NAMEENG"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCDEPARTMENT").Current["ISACTIVE"] = 1;
+                            var divisionId = _xSupport.SQL($"SELECT CCCDIVISION FROM CCCDIVISION WHERE CODE='{exd.Division}' AND COMPANY={_xSupport.ConnectionInfo.CompanyId}", null);
+                            if (divisionId != null)
+                            {
+                                ImpObj.GetTable("CCCDEPARTMENT").Current["CCCDIVISION"] = divisionId;
+                            }
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Department «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateSubdepartment(List<SubdepartmentRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCSUBDEPT"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCSUBDEPT").Current["CODE"] = exd.DepartmentCode + "-" + exdcode;
+                            ImpObj.GetTable("CCCSUBDEPT").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCSUBDEPT").Current["NAMEENG"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCSUBDEPT").Current["ISACTIVE"] = 1;
+                            var departmentId = _xSupport.SQL($"SELECT CCCDEPARTMENT FROM CCCDEPARTMENT WHERE CODE='{exd.DepartmentCode}' AND COMPANY={_xSupport.ConnectionInfo.CompanyId}", null);
+                            if (departmentId != null)
+                            {
+                                ImpObj.GetTable("CCCSUBDEPT").Current["CCCDEPARTMENT"] = departmentId;
+                            }
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Subdepartment «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateClass(List<ClassRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCCLASS"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCCLASS").Current["CODE"] = exd.DepartmentCode + "-" + exd.SubdeptCode + "-" + exdcode;
+                            ImpObj.GetTable("CCCCLASS").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCCLASS").Current["NAMEENG"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCCLASS").Current["ISACTIVE"] = 1;
+                            var subdeptId = _xSupport.SQL($"SELECT CCCSUBDEPT FROM CCCSUBDEPT WHERE CODE='{exd.DepartmentCode + "-" + exd.SubdeptCode/*exd.SubdeptCode*/}' AND COMPANY={_xSupport.ConnectionInfo.CompanyId}", null);
+                            if (subdeptId != null)
+                            {
+                                ImpObj.GetTable("CCCCLASS").Current["CCCSUBDEPT"] = subdeptId;
+                            }
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στη Class «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateBrand(List<BrandRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = "MC" + exd.Code;
+                    var exdname = exd.Description;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCBRAND"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCBRAND").Current["CODE"] = exdcode.ToString();
+                            ImpObj.GetTable("CCCBRAND").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCBRAND").Current["ISACTIVE"] = 1;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στη Brand «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateCollection(List<CollectionRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                var queryMaxId = $@"SELECT ISNULL(MAX(UTBL04), 0) AS MAXID FROM UTBL04 WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND SODTYPE=51";
+                var dsMaxId = _xSupport.SQL(queryMaxId, null);
+                //var listMaxId = dsMaxId != DBNull.Value ? (object[])dsMaxId : null;
+                //var maxid = listMaxId != null ? Convert.ToInt32(listMaxId[0]) : 0;
+                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var collection in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    maxid += 1;
+                    var collectioncode = collection.Code;
+                    var collectionname = collection.Description;
+                    try
+                    {
+                        var updquery = $@"INSERT INTO UTBL04 (UTBL04, CODE, NAME, SODTYPE, ISACTIVE, COMPANY,CCCISMC)
+                                              VALUES ({maxid},'{collectioncode}','{collectionname.Replace("'", "")}',51,1,{_xSupport.ConnectionInfo.CompanyId},1)";
+                        _xSupport.ExecuteSQL(updquery);
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στη Συλλογή «{collectionname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateCommercialCollection(List<CommercialCollectionRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCCOMMERCIALCOLLECTION"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCCOMMERCIALCOLLECTION").Current["CODE"] = exdcode.ToString();
+                            ImpObj.GetTable("CCCCOMMERCIALCOLLECTION").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCCOMMERCIALCOLLECTION").Current["ISACTIVE"] = 1;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στην Εμπορική Συλλογή «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateBusinessUnit(List<BuRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                var queryMaxId = $@"SELECT ISNULL(MAX(BUSUNITS), 0) AS MAXID FROM BUSUNITS";
+                var dsMaxId = _xSupport.SQL(queryMaxId, null);
+                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var bu in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var bucode = "MC" + bu.Code;
+                    var buname = bu.Description;
+                    maxid += 1;
+                    try
+                    {
+                        var updquery = $@"INSERT INTO BUSUNITS ( BUSUNITS,CODE, NAME, ISACTIVE, COMPANY)
+                                              VALUES ({maxid},'{bucode.Replace("'", "")}', '{buname.Replace("'", "")}', 1,{_xSupport.ConnectionInfo.CompanyId})";
+                        _xSupport.ExecuteSQL(updquery);
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο BU «{buname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateItemType(List<ItemTypeRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                var queryMaxId = $@"SELECT ISNULL(MAX(MTRCATEGORY), 0) AS MAXID FROM MTRCATEGORY WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND SODTYPE=51";
+                var dsMaxId = _xSupport.SQL(queryMaxId, null);
+                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = "MC" + exd.Code;
+                    var exdname = exd.Description;
+                    maxid += 1;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("ITECATEGORY"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("MTRCATEGORY").Current["MTRCATEGORY"] = maxid;
+                            ImpObj.GetTable("MTRCATEGORY").Current["CODE"] = exdcode;
+                            ImpObj.GetTable("MTRCATEGORY").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("MTRCATEGORY").Current["ISACTIVE"] = 1;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στον Τύπο Είδους «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateAccountingType(List<AccountingTypeRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                var queryMaxId = $@"SELECT ISNULL(MAX(MTRACN), 0) AS MAXID FROM MTRACN WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND SODTYPE=51";
+                var dsMaxId = _xSupport.SQL(queryMaxId, null);
+                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = "MC" + exd.Code;
+                    var exdname = exd.Description;
+                    maxid += 1;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("ITEMGL"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("MTRACN").Current["MTRACN"] = maxid;
+                            ImpObj.GetTable("MTRACN").Current["CODE"] = exdcode;
+                            ImpObj.GetTable("MTRACN").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("MTRACN").Current["ISACTIVE"] = 1;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στον Τύπο Λογιστικής «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateSizeGuide(List<SizeGuideRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCSIZEGUIDE"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCSIZEGUIDE").Current["CODE"] = exdcode.ToString();
+                            ImpObj.GetTable("CCCSIZEGUIDE").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCSIZEGUIDE").Current["ISACTIVE"] = 1;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Μεγεθολόγιο «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        ////////////////////////////////////////
+        public string UpdateSizeAttributes(List<SizeRecord> exceldata, List<SqlData> size_list, List<SqlData> sizeguide_list)
+        {
+            var logs_remarks = "";
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    var sizeguidecode = exd.SizeGuideCode;
+                    var attr29vcode = exd.Attribute29ValueCode;
+                    var attr51vcode = exd.Attribute51ValueCode;
+                    var sizeguideId = sizeguide_list.Where(x => x.Code.Trim() == sizeguidecode.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                    var orderbyno = exd.OrderByNo;
+                    var sizeId = size_list.Where(x => x.Code.Trim() == exdcode.Trim()).FirstOrDefault()?.Id ?? null;
+                    try
+                    {
+                        if (sizeId > 0)
+                        {
+                            using (var ImpObj = _xSupport.CreateModule("CCCMCSIZE"))
+                            {
+                                ImpObj.LocateData(sizeId);
+                                ImpObj.GetTable("CCCMCSIZE").Current["NAME"] = exdname.Replace("'", "");
+                                ImpObj.GetTable("CCCMCSIZE").Current["ORDERBY"] = orderbyno;
+                                ImpObj.GetTable("CCCMCSIZE").Current["CCCSIZEGUIDE"] = sizeguideId;
+                                ImpObj.GetTable("CCCMCSIZE").Current["ATTRIBUTE29VALCODE"] = attr29vcode;
+                                ImpObj.GetTable("CCCMCSIZE").Current["ATTRIBUTE51VALCODE"] = attr51vcode;
+                                ImpObj.PostData();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Μέγεθος «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+
+
+        ////////////////////////////////////////
+        public string CreateSize(List<SizeRecord> exceldata, List<SqlData> sizeguide_list)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    var sizeguidecode = exd.SizeGuideCode;
+                    var attr29vcode = exd.Attribute29ValueCode;
+                    var attr51vcode = exd.Attribute51ValueCode;
+                    var sizeguideId = sizeguide_list.Where(x => x.Code.Trim() == sizeguidecode.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                    var orderbyno = exd.OrderByNo;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCMCSIZE"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCMCSIZE").Current["CODE"] = exdcode.ToString();
+                            ImpObj.GetTable("CCCMCSIZE").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCMCSIZE").Current["ORDERBY"] = orderbyno;
+                            ImpObj.GetTable("CCCMCSIZE").Current["CCCSIZEGUIDE"] = sizeguideId;
+                            ImpObj.GetTable("CCCMCSIZE").Current["ISACTIVE"] = 1;
+                            ImpObj.GetTable("CCCMCSIZE").Current["ATTRIBUTE29VALCODE"] = attr29vcode;
+                            ImpObj.GetTable("CCCMCSIZE").Current["ATTRIBUTE51VALCODE"] = attr51vcode;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Μέγεθος «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateSeasonality(List<SeasonalityRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCSEASONALITY"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCSEASONALITY").Current["CODE"] = exdcode.ToString();
+                            ImpObj.GetTable("CCCSEASONALITY").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCSEASONALITY").Current["ISACTIVE"] = 1;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στη Εποχικότητα «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateHouse(List<HouseRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdcode = exd.Code;
+                    var exdname = exd.Description;
+                    try
+                    {
+                        using (var ImpObj = _xSupport.CreateModule("CCCHOUSE"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCHOUSE").Current["CODE"] = exdcode.ToString();
+                            ImpObj.GetTable("CCCHOUSE").Current["NAME"] = exdname.Replace("'", "");
+                            ImpObj.GetTable("CCCHOUSE").Current["ISACTIVE"] = 1;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στον Οίκο «{exdname}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateUpdateItems(List<ItemMasterRecord> exceldata, List<SqlData> sqlData)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count > 0)
+            {
+                var item_list = sqlData.Where(x => x.Obj == "item").ToList();
+                var theme_list = sqlData.Where(x => x.Obj == "theme").ToList();
+                var division_list = sqlData.Where(x => x.Obj == "division").ToList();
+                var department_list = sqlData.Where(x => x.Obj == "department").ToList();
+                var subdepartment_list = sqlData.Where(x => x.Obj == "subdept").ToList();
+                var class_list = sqlData.Where(x => x.Obj == "class").ToList();
+                var size_list = sqlData.Where(x => x.Obj == "size").ToList();
+                var color_list = sqlData.Where(x => x.Obj == "color").ToList();
+                var brand_list = sqlData.Where(x => x.Obj == "brand").ToList();
+                var intrastat_list = sqlData.Where(x => x.Obj == "intrastat").ToList();
+                var season_list = sqlData.Where(x => x.Obj == "season").ToList();
+                var collection_list = sqlData.Where(x => x.Obj == "collection").ToList();
+                var commercialcollection_list = sqlData.Where(x => x.Obj == "commercialcollection").ToList();
+                var vat_list = sqlData.Where(x => x.Obj == "vat").ToList();
+                var busunit_list = sqlData.Where(x => x.Obj == "busunit").ToList();
+                var itemtype_list = sqlData.Where(x => x.Obj == "itemtype").ToList();
+                var accountingtype_list = sqlData.Where(x => x.Obj == "accountingtype").ToList();
+                var country_list = sqlData.Where(x => x.Obj == "country").ToList();
+                var supplier_list = sqlData.Where(x => x.Obj == "supplier").ToList();
+                var sizeguide_list = sqlData.Where(x => x.Obj == "sizeguide").ToList();
+                var seasonality_list = sqlData.Where(x => x.Obj == "seasonality").ToList();
+                var house_list = sqlData.Where(x => x.Obj == "house").ToList();
+
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+
+                using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                {
+                    foreach (var item in exceldata)
+                    {
+                        counter++;
+                        ItemObj.SetFieldEditor("ITEM.MTRMANFCTR", null);
+                        ItemObj.SetFieldEditor("ITEM.MTRACN", null);
+                        ItemObj.SetFieldEditor("ITEM.COUNTRY", null);
+                        ItemObj.SetFieldEditor("ITEM.MTRCATEGORY", null);
+
+                        ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                        try
+                        {
+                            var mtrl_list = item_list.Where(x => x.Code.Trim() == item.Code.Trim()).FirstOrDefault();
+                            var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
+                            if (mtrl == 0)
+                            {
+                                ItemObj.InsertData();
+                                ItemObj.GetTable("MTRL").Current["CODE"] = item.Code;
+                                ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] = 2; //0=Όλοι, 1=Dpam, 2=Mothercare
+                            }
+                            else
+                            {
+                                ItemObj.LocateData(mtrl);
+                                var itemcompany = Convert.ToInt32(ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] != DBNull.Value ? ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] : 0);
+                                if (itemcompany == 1)
+                                {
+                                    ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] = 0; //0=Όλοι, 1=Dpam, 2=Mothercare
+                                }
+                            }
+                            ItemObj.GetTable("MTRL").Current["NAME"] = item.Name;
+
+                            ItemObj.GetTable("MTRL").Current["CODE2"] = item.TaxCode;
+                            ItemObj.GetTable("MTRL").Current["CCCASSORTMENTDESCR"] = item.AssortmentDescription;
+                            ItemObj.GetTable("MTRL").Current["CCCSUPPLIERCODE"] = item.SupplierCode;
+
+                            ItemObj.GetTable("MTRL").Current["NAME1"] = item.EnglishDescription;
+                            ItemObj.GetTable("MTRL").Current["REMARKS"] = item.Comments;
+                            var mtrunit = 0;
+                            switch (item.UnitOfMeasure)
+                            {
+                                case 1 /*ΤΕΜΑΧΙΟ*/ : mtrunit = 101 /*Τεμ.*/; break;
+                                case 2 /*ΜΕΤΡΟ*/ : mtrunit = 120 /*Μέτρα*/; break;
+                                case 4 /*ΚΙΛΑ*/: mtrunit = 150 /*Κιλά*/; break;
+                                case 6 /*Κ.ΜΕΤΡΑ*/: mtrunit = 140 /*Κ.Μέτ*/; break;
+                                default: mtrunit = 101; break;
+                            }
+                            ItemObj.GetTable("MTRL").Current["MTRUNIT1"] = mtrunit;
+                            ItemObj.GetTable("MTRL").Current["MTRUNIT2"] = item.PackageQuantity > 0 ? 108 : 101;
+                            ItemObj.GetTable("MTRL").Current["MTRUNIT3"] = mtrunit;
+                            ItemObj.GetTable("MTRL").Current["MTRUNIT4"] = mtrunit;
+                            ItemObj.GetTable("MTRL").Current["MU21"] = item.PackageQuantity > 0 ? Convert.ToDouble(item.PackageQuantity) : 1;
+                            ItemObj.GetTable("MTRL").Current["MU31"] = Convert.ToDouble(1);
+                            ItemObj.GetTable("MTRL").Current["MU41"] = Convert.ToDouble(1);
+                            ItemObj.GetTable("MTRL").Current["MU12MODE"] = 1;
+                            ItemObj.GetTable("MTRL").Current["MU13MODE"] = 1;
+                            ItemObj.GetTable("MTRL").Current["MU14MODE"] = 1;
+                            ItemObj.GetTable("MTRL").Current["CCCCOMPOSEDOFQTY"] = item.ComposedOfQuantity;
+
+                            var divisionId = division_list.Where(x => x.Code.Trim() == item.Division.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCDIVISION"] = divisionId;
+                            if (item.Division.ToString() != "" && divisionId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Το Division με Κωδικό «{item.Division}» δεν υπάρχει στο Softone για το είδος με κωδικό «{item.Code}»." + Environment.NewLine;
+                            }
+                            var departmentId = department_list.Where(x => x.Code.Trim() == item.Department.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCDEPARTMENT"] = departmentId;
+                            if (item.Department.ToString() !="" && departmentId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Το Department με Κωδικό «{item.Department}» δεν υπάρχει στο Softone για το είδος με κωδικό «{item.Code}»." + Environment.NewLine;
+                            }
+                            var subdeptId = subdepartment_list.Where(x => x.Code.Trim() == item.Department.ToString().Trim() + "-" + item.Subdept.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCSUBDEPT"] = subdeptId;
+                            if (item.Subdept.ToString() != "" && subdeptId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Το Subdept με Κωδικό «{item.Subdept}» δεν υπάρχει στο Softone για το είδος με κωδικό « {item.Code} »." + Environment.NewLine;
+                            }
+                            var classId = class_list.Where(x => x.Code.Trim() == item.Department.ToString().Trim() + "-" + item.Subdept.ToString().Trim() + "-" + item.Class.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCCLASS"] = classId;
+                            if (item.Class.ToString() != "" && classId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Η Class με Κωδικό «{item.Class}» δεν υπάρχει στο Softone για το είδος με κωδικό « {item.Code} »." + Environment.NewLine;
+                            }
+                            ItemObj.GetTable("MTRL").Current["CCCYEAR"] = item.Year;
+                            ItemObj.GetTable("MTRL").Current["CCCQUARTER"] = item.Season;
+                            ItemObj.GetTable("MTRL").Current["CCCCURYEAR"] = item.StatisticalYear;
+                            var mtrmanufacturerId = theme_list.Where(x => x.Name.Trim() == item.StyleNo.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["MTRMANFCTR"] = mtrmanufacturerId;
+                            if (item.StyleNo.ToString() != "" && mtrmanufacturerId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Το StyleNo με Κωδικό «{item.StyleNo}» δεν υπάρχει στο Softone για το είδος με κωδικό « {item.Code} »." + Environment.NewLine;
+                            }
+                            //var colorId = 0;//item.Color;
+                            //ItemObj.GetTable("MTRL").Current["CCCCOLOR"] = colorId;
+                            var sizeguideId = sizeguide_list.Where(x => x.Code.Trim() == item.SizeGuide.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCSIZEGUIDE"] = sizeguideId;
+                            if (item.SizeGuide.ToString() != "" && sizeguideId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Το Μεγεθολόγιο με Κωδικό «{item.SizeGuide}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            var sizeId = size_list.Where(x => x.Code.Trim() == item.Size.ToString().Trim() && x.Flg1 == sizeguideId).FirstOrDefault()?.Id ?? null;//item.Size;
+                            ItemObj.GetTable("MTRL").Current["CCCMCSIZE"] = sizeId;
+                            if (item.Size.ToString() != "" && sizeId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Το Μέγεθος με Κωδικό «{item.Size}» για το Μεγεθολόγιο με Κωδικό «{item.SizeGuide}», δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            var brandId = brand_list.Where(x => x.Code.Trim() == "MC" + item.Brand.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCBRAND"] = brandId;
+                            if (item.Brand.ToString() != "" && brandId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Το Brand με Κωδικό «{item.Brand}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            var houseId = house_list.Where(x => x.Code.Trim() == item.House.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCHOUSE"] = houseId;
+                            if (item.House.ToString() != "" && houseId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Ο Οίκος με Κωδικό «{item.House}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            var vat = 0;
+                            switch (item.VatCategory)
+                            {
+                                case 1 /*Υψηλός Συντελεστής*/ : vat = 1410 /*24*/; break;
+                                case 2 /*Χαμηλός Συντελεστής*/ : vat = 1060 /*6*/; break;
+                                case 3 /*Μεσαίος Συντελεστής*/: vat = 1131 /*13*/; break;
+                                case 4 /*Μηδενικός Συντελεστής*/: vat = 0 /*0*/; break;
+                                default: vat = 1410; break;
+                            }
+                            ItemObj.GetTable("MTRL").Current["VAT"] = vat;
+                            ItemObj.GetTable("MTRL").Current["CCCFASI"] = item.Phase;
+                            var seasonalityId = seasonality_list.Where(x => x.Code.Trim() == item.Seasonality.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCSEASONALITY"] = seasonalityId;
+                            if ((item.Seasonality.ToString() != "" && item.Seasonality.ToString() != "0") && seasonalityId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Η Εποχικότητα με Κωδικό «{item.Seasonality}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            ItemObj.GetTable("MTRL").Current["CCCLISTUP"] = item.ListUp;
+                            DateTime nulldate = new DateTime(1899, 12, 30);
+                            if (item.Outlet != null)
+                            {
+                                ItemObj.GetTable("MTRL").Current["CCCOUTLET"] = item.Outlet <= nulldate ? (DateTime?)null : item.Outlet;
+                            }
+                            ItemObj.GetTable("MTRL").Current["GWEIGHT"] = item.NetWeight;
+                            var countryId = country_list.Where(x => x.Code.Trim() == item.CountryOfOrigin.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["COUNTRY"] = countryId;
+                            if (item.CountryOfOrigin.ToString() != "" && countryId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Η Χώρα Προέλευσης με Κωδικό «{item.CountryOfOrigin}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            var intrastatId = intrastat_list.Where(x => x.Code.Trim() == item.Intrastat.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["INTRASTAT"] = intrastatId;
+                            if (item.Intrastat.ToString() != "" && intrastatId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Το Intrastat με Κωδικό «{item.Intrastat}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            ItemObj.GetTable("MTRL").Current["ISACTIVE"] = 1;
+                            ItemObj.GetTable("MTRL").Current["CCCMSSTATUS"] = item.Status;
+                            var collectionId = collection_list.Where(x => x.Code.Trim() == item.Collection.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTREXTRA").Current["UTBL04"] = collectionId;
+                            if (item.Collection.ToString() != "" && collectionId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Η Συλλογή με Κωδικό «{item.Collection}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            var commercialcollectionId = commercialcollection_list.Where(x => x.Code.Trim() == item.CommercialCollection.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["CCCCOMMERCIALCOLLECTION"] = commercialcollectionId;
+                            if (item.CommercialCollection.ToString() != "" && commercialcollectionId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Η Εμπ. Συλλογή με Κωδικό «{item.CommercialCollection}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            var buId = busunit_list.Where(x => x.Code.Trim() == "MC" + item.Bu.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["BUSUNITS"] = buId;
+                            if (item.Bu.ToString() != "" && buId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Το BU με Κωδικό «{item.Bu}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            var itemtypeId = itemtype_list.Where(x => x.Code.Trim() == "MC" + item.ItemType.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["MTRCATEGORY"] = itemtypeId;
+                            if (item.ItemType.ToString() != "" && itemtypeId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Ο Τύπος Είδους με Κωδικό «{item.ItemType}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            var accountingtypeId = accountingtype_list.Where(x => x.Code.Trim() == "MC" + item.AccountingType.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            ItemObj.GetTable("MTRL").Current["MTRACN"] = accountingtypeId;
+                            if (item.AccountingType.ToString() != "" && accountingtypeId == null)
+                            {
+                                logs_remarks = logs_remarks + $"Ο Τύπος για λογιστική με Κωδικό «{item.AccountingType}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
+                            }
+                            ItemObj.GetTable("MTREXTRA").Current["VARCHAR01"] = item.ImagePath;
+                            ItemObj.GetTable("MTREXTRA").Current["BOOL02"] = item.RestockWithPackage;
+                            ItemObj.GetTable("MTRL").Current["CCCLIGUARANTYMONTHS"] = item.WarrantyMonths;
+                            ItemObj.GetTable("MTRL").Current["CCCESHOPMASTERCODE"] = item.EshopMasterCode;
+                            ItemObj.GetTable("MTRL").Current["CCCHEIGHT"] = item.Height;
+                            ItemObj.GetTable("MTRL").Current["CCCLENGTH"] = item.Length;
+                            ItemObj.GetTable("MTRL").Current["CCCWIDTH"] = item.Width;
+                            ItemObj.GetTable("MTRL").Current["VOLUME"] = item.ItemCubeM;
+                            ItemObj.GetTable("MTREXTRA").Current["VARCHAR02"] = item.PhotoName;
+                            ItemObj.GetTable("MTRL").Current["CCCWORKINPROGRESSINGR"] = item.WorkInProgressInGr;
+                            ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINGR"] = item.ToBePublishedInGr;
+                            ItemObj.GetTable("MTRL").Current["CCCTOBEUNPUBLISHEDINGR"] = item.ToBeUnpublishedInGr;
+                            ItemObj.GetTable("MTRL").Current["CCCHASTRANSLATION"] = item.HasTranslation;
+                            ItemObj.GetTable("MTRL").Current["CCCISPUBLISHEDINGR"] = item.IsPublishedInGr;
+                            ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINSKROUTZ"] = item.ToBePublishedInSkroutz;
+                            ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINPUBLIC"] = item.ToBePublishedInPublic;
+                            ////if (data.eDescription != "")
+                            ////{
+                            ////    var htmldescription = "<html><head><meta http-equiv=" + "\"Content - Type\"" + " content =" + "\"text / html; charset = windows - 1253\"" + " ><title></title><style></style></head><body>" +
+                            ////        data.eDescription.ToString() + "</body></html>";
+                            ////    ItemObj.GetTable("MTRL").Current["CCCHTMLGRDESCRIPTIONTXT"] = htmldescription;
+                            ////    byte[] bytes = System.Text.Encoding.UTF8.GetBytes(htmldescription);
+                            ////    ItemObj.GetTable("MTRL").Current["CCCHTMLGRDESCRIPTION"] = bytes;
+                            ////}
+                            ItemObj.SetFieldEditor("ITEM.MTRMANFCTR", "MTRMANFCTR");
+                            ItemObj.SetFieldEditor("ITEM.MTRACN", "ITEMGL");
+                            ItemObj.SetFieldEditor("ITEM.COUNTRY", "COUNTRY");
+                            ItemObj.SetFieldEditor("ITEM.MTRCATEGORY", "ITECATEGORY");
+                            var newId = ItemObj.PostData();
+                            newId = newId < 0 ? mtrl : newId;
+                            //Images
+                            if (item.ImagePath != "" && newId > 0)
+                            {
+                                var queryimage = $@"SELECT REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,SODATA,DEFXTRDOC,XDOCTYPE,SOMD FROM XTRDOCDATA 
+                                                    WHERE REFOBJID={newId} AND SOSOURCE = 51 AND LNUM=0 AND SOFNAME ='{item.ImagePath}' ";
+                                using (var ds = _xSupport.GetSQLDataSet(queryimage, null))
+                                {
+                                    try
+                                    {
+                                        if (ds.Count == 0)
+                                        {
+                                            var execsql = "";
+                                            execsql = $"DELETE FROM XTRDOCDATA WHERE REFOBJID={newId} AND SOSOURCE = 51; ";
+                                            execsql = execsql + $@"INSERT INTO XTRDOCDATA (REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,NAME,SOFNAME,DEFXTRDOC,XDOCTYPE,SOMD) 
+                                                                    VALUES ({newId},51 ,0 ,1 ,0 ,'{item.PhotoName}','{item.ImagePath}' ,0 ,0 ,0); ";
+                                            _xSupport.ExecuteSQL(execsql);
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        logs_remarks = logs_remarks + $"Πρόβλημα στην εικόνα «{item.PhotoName}» του είδους με Κωδικό «{item.Code}»." + ex.Message + Environment.NewLine;
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logs_remarks = logs_remarks + $"Πρόβλημα στο είδος με Κωδικό «{item.Code}»." + ex.Message + Environment.NewLine;
+                        }
+                    }
+                    MarkStage(2);
+                    MarkStage(3);
+                    MarkStage(0);
+                    ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                    var resultsprocess = "result1,result2,result3";
+                    _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+                }
+            }
+            return logs_remarks;
+        }
+        public string UpdateSupBarcodes(List<SupBarcodeRecord> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    var exdtaxcode = exd.TaxCode;
+                    var exdsupbarcode = exd.SupBarcode;
+                    try
+                    {
+                        var updquery = $@"UPDATE MTRL SET CCCSUPBARCODE='{exdsupbarcode}' WHERE CODE2='{exdtaxcode}' AND COMPANY={_xSupport.ConnectionInfo.CompanyId}";
+                        _xSupport.ExecuteSQL(updquery);
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Barcode Προμηθευτή «{exdsupbarcode}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string SetSimilarItems(List<SimilarItemRecord> exceldata, List<SqlData> item_list)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                var grouped = exceldata.GroupBy(r => r.ItemCode).Select(g => new SimilarItemGroup
+                {
+                    ItemCode = g.Key,
+                    ReferenceItemCodes = g.Select(r => r.ReferenceItemCode).ToList()
+                }).ToList();
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, grouped.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var similar in grouped)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    try
+                    {
+                        var mtrl_list = item_list.Where(x => x.Code.Trim() == similar.ItemCode.Trim()).FirstOrDefault();
+                        var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
+                        var mname = mtrl_list != null ? mtrl_list.Name : "";
+                        var similarCodes = similar.ReferenceItemCodes.Where(code => item_list.Any(item => item.Code.Trim() == code.Trim())).ToList();
+
+                        if (mtrl > 0 && similarCodes.Count > 0)
+                        {
+                            using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                            {
+                                ItemObj.LocateData(mtrl);
+                                //Πίνακας CCCSIMILARITEMS
+                                using (var mtrsimilar = ItemObj.GetTable("CCCSIMILARITEMS"))
+                                {
+                                    foreach (var code in similarCodes)
+                                    {
+                                        var similarItem_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
+                                        var similarItem = similarItem_list != null ? similarItem_list.Id : 0;
+                                        var recNo1 = mtrsimilar.Find("SIMMTRL", similarItem);
+                                        if (recNo1 == -1)
+                                        {
+                                            mtrsimilar.Current.Append();
+                                            mtrsimilar.Current["SIMMTRL"] = similarItem;
+                                            mtrsimilar.Current["SIMILARITY"] = Convert.ToDouble(100);
+                                            mtrsimilar.Current.Post();
+                                        }
+                                    }
+                                }
+                                ItemObj.PostData();
+                            }
+                        }
+                        else
+                        {
+                            if (mtrl == 0)
+                            {
+                                logs_remarks = logs_remarks + $"Δεν υπάρχει το είδος «{similar.ItemCode}»." + Environment.NewLine;
+                            }
+                            var notexistsimilarcodeslist = similar.ReferenceItemCodes.Where(code => !item_list.Any(item => item.Code.Trim() == code.Trim())).ToList();
+                            if (notexistsimilarcodeslist.Count > 0)
+                            {
+                                var notexistsimilarcodes = String.Join(",", notexistsimilarcodeslist);
+                                logs_remarks = logs_remarks + $"Δεν υπάρχουν οι κωδικοί ({notexistsimilarcodes}) για το είδος «{similar.ItemCode}»." + Environment.NewLine;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Όμοιο Είδος «{similar.ItemCode}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string ImportBarcode(List<BarcodeRecord> exceldata, List<SqlData> item_list)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var barcode in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    try
+                    {
+                        using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                        {
+                            var mtrl_list = item_list.Where(x => x.Code.Trim() == barcode.ItemCode.Trim()).FirstOrDefault();
+                            var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
+                            var mname = mtrl_list != null ? mtrl_list.Name : "";
+                            if (mtrl > 0)
+                            {
+                                ItemObj.LocateData(mtrl);
+                                //Πίνακας MTRSUBSTITUTE
+                                using (var mtrsubstitute = ItemObj.GetTable("MTRSUBSTITUTE"))
+                                {
+                                    var recNo1 = mtrsubstitute.Find("CODE", barcode.Barcode);
+                                    if (recNo1 == -1)
+                                    {
+                                        mtrsubstitute.Current.Append();
+                                        mtrsubstitute.Current["CODE"] = barcode.Barcode;
+                                        mtrsubstitute.Current["NAME"] = mname;
+                                        mtrsubstitute.Current["QTY1"] = Convert.ToDouble(1);
+                                        //mtrsubstitute.Current["QTY2"] = Convert.ToDouble(1);
+                                        mtrsubstitute.Current.Post();
+                                    }
+                                }
+                                ItemObj.PostData();
+                            }
+                            else
+                            {
+                                logs_remarks = logs_remarks + $"Δεν υπάρχει το είδος «{barcode.ItemCode}» με Barcode «{barcode.Barcode}»." + Environment.NewLine;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Barcode «{barcode.Barcode}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateIntrastat(List<string> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                var queryMaxId = $@"SELECT ISNULL(MAX(INTRASTAT), 0) AS MAXID FROM INTRASTAT WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId}";
+                var dsMaxId = _xSupport.SQL(queryMaxId, null);
+                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
+                foreach (var intrastat in exceldata)
+                {
+                    var intrastatcode = intrastat.Length>8 ? intrastat.Substring(0, 8) : intrastat;
+                    if (intrastatcode != "")
+                    {
+                        counter++;
+                        ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                        maxid += 1;
+                        try
+                        {
+                            var updquery = $@"INSERT INTO INTRASTAT (INTRASTAT, CODE, NAME, ISACTIVE, COMPANY)
+                                              VALUES ({maxid},'{intrastatcode}','{intrastat.Replace("'", "")}',1,{_xSupport.ConnectionInfo.CompanyId})";
+                            _xSupport.ExecuteSQL(updquery);
+                        }
+                        catch (Exception ex)
+                        {
+                            logs_remarks = logs_remarks + $"Πρόβλημα στο Intrastat «{intrastatcode}»." + ex.Message + Environment.NewLine;
+                        }
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string CreateTheme(List<string> exceldata)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                var queryMaxId = $@"SELECT ISNULL(MAX(MTRMANFCTR), 0) AS MAXID FROM MTRMANFCTR WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId}";
+                var dsMaxId = _xSupport.SQL(queryMaxId, null);
+                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
+
+                foreach (var theme in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    maxid += 1;
+                    var themecode = "MC" + maxid;
+                    var themename = theme;
+                    try
+                    {
+                        var updquery = $@"INSERT INTO MTRMANFCTR (COMPANY,MTRMANFCTR,CODE,NAME,ISACTIVE)
+                                              VALUES ({_xSupport.ConnectionInfo.CompanyId},{maxid}, '{themecode}','{themename.Replace("'", "")}',1)";
+                        _xSupport.ExecuteSQL(updquery);
+                    }
+                    catch (Exception ex)
+                    {
+                        _xSupport.Exception($"Πρόβλημα στο Θέμα «{themename}»." + ex.Message);
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        //-----------------------------------------------------------------------------------------------------------------------------------//
+        //-------------------------------------------------------------//Eshop//-------------------------------------------------------------//
+        //-----------------------------------------------------------------------------------------------------------------------------------//
         public List<ProductAttributeRecord> GetSqlProductAttributeData()
         {
             var sqldata = new List<ProductAttributeRecord>();
             try
             {
-                var query = $@"SELECT M.MTRL,
-                            TH.CCCLANGUAGE AS CN_LANG_CD,
-                            M.CODE AS AP_EIDH_CD,
-                            TH.TRANSLATION,
-                            MA.CODE AS AP_ATTR0_CD,
-                            MAL.CODE AS AP_ATTR1_CD,
-                            FT.FREETXT AS FREE_TEXT
+                var query = $@"SELECT M.MTRL,TH.CCCLANGUAGE AS CN_LANG_CD,M.CODE AS AP_EIDH_CD,TH.TRANSLATION,MA.CODE AS AP_ATTR0_CD,MAL.CODE AS AP_ATTR1_CD,FT.FREETXT AS FREE_TEXT
                             FROM MTRL M
                             LEFT JOIN MTRLATTRIBUTES MAS ON MAS.MTRL=M.MTRL
                             LEFT JOIN CCCATTIBUTETRANSLATION TH ON TH.MTRATTRIBUTE=MAS.MTRATTRIBUTE AND TH.DATATYPE=1
@@ -231,7 +1519,7 @@ namespace MothercareImportData.Services
                 var queryAttributes = $@"SELECT MTRATTRIBUTE,CODE,NAME FROM MTRATTRIBUTE WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISACTIVE=1";
                 using (var dsAttributes = _xSupport.GetSQLDataSet(queryAttributes, null))
                 {
-                    try 
+                    try
                     {
                         if (dsAttributes.Count > 0)
                         {
@@ -351,816 +1639,19 @@ namespace MothercareImportData.Services
                 throw new Exception(ex.Message);
             }
         }
-        public List<NidRecord> GetNids()
+        public string CreateUpdateAttributes(List<AttributeRecord> attributes)
         {
-            var sqldata = new List<NidRecord>();
-            try
-            {
-                var query = "SELECT M.MTRL,I.STORE,M.CODE,I.NID,I.INSDATE FROM MTRL M INNER JOIN CCCNID I ON I.MTRL=M.MTRL";
-                using (var ds = _xSupport.GetSQLDataSet(query, null))
-                {
-                    try
-                    {
-                        if (ds.Count > 0)
-                        {
-                            for (int i = 0; i < ds.Count; i++)
-                            {
-                                var itemCode = ds.GetAsString(i, "CODE");
-                                var storeId = ds.GetAsInteger(i, "STORE");
-                                var nid = ds.GetAsInteger(i, "NID");
-                                var insdate = ds.GetAsDateTime(i, "INSDATE");
-                                NidRecord nidRecord = sqldata.FirstOrDefault(x => x.ItemCode == itemCode);
-                                if (nidRecord == null)
-                                {
-                                    nidRecord = new NidRecord
-                                    {
-                                        ItemCode = itemCode,
-                                        NidStores = new List<NidStores>()
-                                    };
-                                    sqldata.Add(nidRecord);
-                                }
-                                // Προσθέτουμε το NidStores στον NidRecord
-                                if (!nidRecord.NidStores.Any(x => x.StoreId == storeId))
-                                {
-                                    nidRecord.NidStores.Add(new NidStores
-                                    {
-                                        StoreId = storeId,
-                                        Nid = nid,
-                                        InsDate = insdate
-                                    });
-                                }
-                            }
-                        }
-                        return sqldata;
-                    }
-                    catch (Exception ex)
-                    {
-                        return sqldata;
-                        throw new Exception(ex.Message);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                return sqldata;
-                throw new Exception(ex.Message);
-            }
-        }
-
-
-        public void CreateSizeGuide(List<SizeGuideRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = exd.Code;
-                        var exdname = exd.Description;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCSIZEGUIDE"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCSIZEGUIDE").Current["CODE"] = exdcode.ToString();
-                                ImpObj.GetTable("CCCSIZEGUIDE").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCSIZEGUIDE").Current["ISACTIVE"] = 1;
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο Μεγεθολόγιο «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateSize(List<SizeRecord> exceldata, List<SqlData> sizeguide_list)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = exd.Code;
-                        var exdname = exd.Description;
-                        var sizeguidecode = exd.SizeGuideCode;
-                        var sizeguideId = sizeguide_list.Where(x => x.Code.Trim() == sizeguidecode.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                        var orderbyno = exd.OrderByNo;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCMCSIZE"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCMCSIZE").Current["CODE"] = exdcode.ToString();
-                                ImpObj.GetTable("CCCMCSIZE").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCMCSIZE").Current["ORDERBY"] = orderbyno;
-                                ImpObj.GetTable("CCCMCSIZE").Current["CCCSIZEGUIDE"] = sizeguideId;
-                                ImpObj.GetTable("CCCMCSIZE").Current["ISACTIVE"] = 1;
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο Μέγεθος «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateSeasonality(List<SeasonalityRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = exd.Code;
-                        var exdname = exd.Description;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCSEASONALITY"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCSEASONALITY").Current["CODE"] = exdcode.ToString();
-                                ImpObj.GetTable("CCCSEASONALITY").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCSEASONALITY").Current["ISACTIVE"] = 1;
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στη Εποχικότητα «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateHouse(List<HouseRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = exd.Code;
-                        var exdname = exd.Description;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCHOUSE"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCHOUSE").Current["CODE"] = exdcode.ToString();
-                                ImpObj.GetTable("CCCHOUSE").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCHOUSE").Current["ISACTIVE"] = 1;
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στον Οίκο «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateCommercialCollection(List<CommercialCollectionRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = exd.Code;
-                        var exdname = exd.Description;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCCOMMERCIALCOLLECTION"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCCOMMERCIALCOLLECTION").Current["CODE"] = exdcode.ToString();
-                                ImpObj.GetTable("CCCCOMMERCIALCOLLECTION").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCCOMMERCIALCOLLECTION").Current["ISACTIVE"] = 1;
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στον Οίκο «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void UpdateSupBarcodes(List<SupBarcodeRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try 
-                {
-                    foreach (var exd in exceldata)
-                    { 
-                        var exdtaxcode = exd.TaxCode;
-                        var exdsupbarcode = exd.SupBarcode;
-                        try
-                        {
-                            var updquery = $@"UPDATE MTRL SET CCCSUPBARCODE='{exdsupbarcode}' WHERE CODE2='{exdtaxcode}' AND COMPANY={_xSupport.ConnectionInfo.CompanyId}";
-                            _xSupport.ExecuteSQL(updquery);
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο Barcode Προμηθευτή «{exdsupbarcode}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateDivision(List<DivisionRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = exd.Code;
-                        var exdname = exd.Description;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCDIVISION"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCDIVISION").Current["CODE"] = exdcode.ToString();
-                                ImpObj.GetTable("CCCDIVISION").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCDIVISION").Current["NAMEENG"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCDIVISION").Current["ISACTIVE"] = 1;
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο division «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateDepartment(List<DepartmentRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = exd.Code;
-                        var exdname = exd.Description;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCDEPARTMENT"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCDEPARTMENT").Current["CODE"] = exdcode.ToString();
-                                ImpObj.GetTable("CCCDEPARTMENT").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCDEPARTMENT").Current["NAMEENG"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCDEPARTMENT").Current["ISACTIVE"] = 1;
-                                var divisionId = _xSupport.SQL($"SELECT CCCDIVISION FROM CCCDIVISION WHERE CODE='{exd.Division}' AND COMPANY={_xSupport.ConnectionInfo.CompanyId}", null);
-                                if (divisionId != null)
-                                {
-                                    ImpObj.GetTable("CCCDEPARTMENT").Current["CCCDIVISION"] = divisionId;
-                                }
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο department «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateSubdepartment(List<SubdepartmentRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = exd.Code;
-                        var exdname = exd.Description;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCSUBDEPT"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCSUBDEPT").Current["CODE"] = exd.DepartmentCode+"-"+exdcode;
-                                ImpObj.GetTable("CCCSUBDEPT").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCSUBDEPT").Current["NAMEENG"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCSUBDEPT").Current["ISACTIVE"] = 1;
-                                var departmentId = _xSupport.SQL($"SELECT CCCDEPARTMENT FROM CCCDEPARTMENT WHERE CODE='{exd.DepartmentCode}' AND COMPANY={_xSupport.ConnectionInfo.CompanyId}", null);
-                                if (departmentId != null)
-                                {
-                                    ImpObj.GetTable("CCCSUBDEPT").Current["CCCDEPARTMENT"] = departmentId;
-                                }
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο subdept «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateClass(List<ClassRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = exd.Code;
-                        var exdname = exd.Description;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCCLASS"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCCLASS").Current["CODE"] = exd.DepartmentCode+"-"+exd.SubdeptCode+"-"+exdcode;
-                                ImpObj.GetTable("CCCCLASS").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCCLASS").Current["NAMEENG"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCCLASS").Current["ISACTIVE"] = 1;
-                                var subdeptId = _xSupport.SQL($"SELECT CCCSUBDEPT FROM CCCSUBDEPT WHERE CODE='{exd.DepartmentCode+"-"+exd.SubdeptCode/*exd.SubdeptCode*/}' AND COMPANY={_xSupport.ConnectionInfo.CompanyId}", null);
-                                if (subdeptId != null)
-                                {
-                                    ImpObj.GetTable("CCCCLASS").Current["CCCSUBDEPT"] = subdeptId;
-                                }
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο class «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateBrand(List<BrandRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var exd in exceldata)
-                    {
-                        var exdcode = "MC" + exd.Code;
-                        var exdname = exd.Description;
-                        try
-                        {
-                            using (var ImpObj = _xSupport.CreateModule("CCCBRAND"))
-                            {
-                                ImpObj.InsertData();
-                                ImpObj.GetTable("CCCBRAND").Current["CODE"] = exdcode.ToString();
-                                ImpObj.GetTable("CCCBRAND").Current["NAME"] = exdname.Replace("'", "");
-                                ImpObj.GetTable("CCCBRAND").Current["ISACTIVE"] = 1;
-                                ImpObj.PostData();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο brand «{exdname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateCollection(List<CollectionRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                var queryMaxId = $@"SELECT ISNULL(MAX(UTBL04), 0) AS MAXID FROM UTBL04 WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND SODTYPE=51";
-                var dsMaxId = _xSupport.SQL(queryMaxId, null);
-                //var listMaxId = dsMaxId != DBNull.Value ? (object[])dsMaxId : null;
-                //var maxid = listMaxId != null ? Convert.ToInt32(listMaxId[0]) : 0;
-                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
-                try
-                {
-                    foreach (var collection in exceldata)
-                    {
-                        maxid += 1;
-                        var collectioncode = collection.Code;
-                        var collectionname = collection.Description;
-                        try
-                        {
-                            var updquery = $@"INSERT INTO UTBL04 (UTBL04, CODE, NAME, SODTYPE, ISACTIVE, COMPANY,CCCISMC)
-                                              VALUES ({maxid},'{collectioncode}','{collectionname.Replace("'", "")}',51,1,{_xSupport.ConnectionInfo.CompanyId},1)";
-                            _xSupport.ExecuteSQL(updquery);
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στη Συλλογή «{collectionname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateBusinessUnit(List<BuRecord> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                var queryMaxId = $@"SELECT ISNULL(MAX(BUSUNITS), 0) AS MAXID FROM BUSUNITS";
-                var dsMaxId = _xSupport.SQL(queryMaxId, null);
-                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
-                try
-                {
-                    foreach (var bu in exceldata)
-                    {
-                        var bucode = "MC" + bu.Code;
-                        var buname = bu.Description;
-                        maxid += 1;
-                        try
-                        {
-                            var updquery = $@"INSERT INTO BUSUNITS ( BUSUNITS,CODE, NAME, ISACTIVE, COMPANY)
-                                              VALUES ({maxid},'{bucode.Replace("'", "")}', '{buname.Replace("'", "")}', 1,{_xSupport.ConnectionInfo.CompanyId})";
-                            _xSupport.ExecuteSQL(updquery);
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο BU «{buname}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateItemType(List<ItemTypeRecord> exceldata)
-        {
-            try
-            {
-                var queryMaxId = $@"SELECT ISNULL(MAX(MTRCATEGORY), 0) AS MAXID FROM MTRCATEGORY WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND SODTYPE=51";
-                var dsMaxId = _xSupport.SQL(queryMaxId, null);
-                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
-
-                foreach (var exd in exceldata)
-                {
-                    var exdcode = "MC" + exd.Code;
-                    var exdname = exd.Description;
-                    maxid += 1;
-
-                    try
-                    {
-                        using (var ImpObj = _xSupport.CreateModule("ITECATEGORY"))
-                        {
-                            ImpObj.InsertData();
-                            ImpObj.GetTable("MTRCATEGORY").Current["MTRCATEGORY"] = maxid;
-                            ImpObj.GetTable("MTRCATEGORY").Current["CODE"] = exdcode;
-                            ImpObj.GetTable("MTRCATEGORY").Current["NAME"] = exdname.Replace("'", "");
-                            ImpObj.GetTable("MTRCATEGORY").Current["ISACTIVE"] = 1;
-                            ImpObj.PostData();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _xSupport.Exception($"Πρόβλημα στον Τύπο Είδους «{exdname}»." + ex.Message);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _xSupport.Exception(ex.Message);
-            }
-        }
-        public void CreateAccountingType(List<AccountingTypeRecord> exceldata)
-        {
-            try
-            {
-                var queryMaxId = $@"SELECT ISNULL(MAX(MTRACN), 0) AS MAXID FROM MTRACN WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND SODTYPE=51";
-                var dsMaxId = _xSupport.SQL(queryMaxId, null);
-                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
-
-                foreach (var exd in exceldata)
-                {
-                    var exdcode = "MC" + exd.Code;
-                    var exdname = exd.Description;
-                    maxid += 1;
-
-                    try
-                    {
-                        using (var ImpObj = _xSupport.CreateModule("ITEMGL"))
-                        {
-                            ImpObj.InsertData();
-                            ImpObj.GetTable("MTRACN").Current["MTRACN"] = maxid;
-                            ImpObj.GetTable("MTRACN").Current["CODE"] = exdcode;
-                            ImpObj.GetTable("MTRACN").Current["NAME"] = exdname.Replace("'", "");
-                            ImpObj.GetTable("MTRACN").Current["ISACTIVE"] = 1;
-                            ImpObj.PostData();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _xSupport.Exception($"Πρόβλημα στον Τύπο Λογιστικής «{exdname}»." + ex.Message);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _xSupport.Exception(ex.Message);
-            }
-        }
-        public void CreateIntrastat(List<string> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                var queryMaxId = $@"SELECT ISNULL(MAX(INTRASTAT), 0) AS MAXID FROM INTRASTAT WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId}";
-                var dsMaxId = _xSupport.SQL(queryMaxId, null);
-                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
-                try
-                {
-                    foreach (var intrastat in exceldata)
-                    {
-                        maxid += 1;
-                        var intrastatcode = intrastat.Substring(0, 8);
-                        try
-                        {
-                            var updquery = $@"INSERT INTO INTRASTAT (INTRASTAT, CODE, NAME, ISACTIVE, COMPANY)
-                                              VALUES ({maxid},'{intrastatcode}','{intrastat.Replace("'", "")}',1,{_xSupport.ConnectionInfo.CompanyId})";
-                            _xSupport.ExecuteSQL(updquery);
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο Intrastat «{intrastatcode}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateTheme(List<string> exceldata)
-        {
-            if (exceldata.Count() > 0)
-            {
-                var queryMaxId = $@"SELECT ISNULL(MAX(MTRMANFCTR), 0) AS MAXID FROM MTRMANFCTR WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId}";
-                var dsMaxId = _xSupport.SQL(queryMaxId, null);
-                var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
-                try
-                {
-                    foreach (var theme in exceldata)
-                    {
-                        maxid += 1;
-                        var themecode = "MC"+ maxid;
-                        var themename = theme;
-                        try
-                        {
-                            var updquery = $@"INSERT INTO MTRMANFCTR (COMPANY,MTRMANFCTR,CODE,NAME,ISACTIVE)
-                                              VALUES ({_xSupport.ConnectionInfo.CompanyId},{maxid}, '{themecode}','{themename.Replace("'", "")}',1)";
-                            _xSupport.ExecuteSQL(updquery);
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο Θέμα «{themename}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void ImportBarcode(List<BarcodeRecord> exceldata, List<SqlData> item_list)
-        { 
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var barcode in exceldata)
-                    {
-                        try
-                        {
-                            using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
-                            {
-                                var mtrl_list = item_list.Where(x => x.Code.Trim() == barcode.ItemCode.Trim()).FirstOrDefault();
-                                var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
-                                var mname = mtrl_list != null ? mtrl_list.Name : "";
-                                if (mtrl>0)
-                                {
-                                    ItemObj.LocateData(mtrl);
-                                    //Πίνακας MTRSUBSTITUTE
-                                    using (var mtrsubstitute = ItemObj.GetTable("MTRSUBSTITUTE"))
-                                    {
-                                        var recNo1 = mtrsubstitute.Find("CODE", barcode.Barcode);
-                                        if (recNo1 == -1)
-                                        {
-                                            mtrsubstitute.Current.Append();
-                                            mtrsubstitute.Current["CODE"] = barcode.Barcode;
-                                            mtrsubstitute.Current["NAME"] = mname;
-                                            mtrsubstitute.Current["QTY1"] = Convert.ToDouble(1);
-                                            //mtrsubstitute.Current["QTY2"] = Convert.ToDouble(1);
-                                            mtrsubstitute.Current.Post();
-                                        }
-                                    }
-                                    ItemObj.PostData();
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο Barcode «{barcode.Barcode}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void SetSimilarItems(List<SimilarItemRecord> exceldata, List<SqlData> item_list)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    var grouped = exceldata.GroupBy(r => r.ItemCode).Select(g => new SimilarItemGroup
-                    {
-                        ItemCode = g.Key,
-                        ReferenceItemCodes = g.Select(r => r.ReferenceItemCode).ToList()
-                    }).ToList();
-                    foreach (var similar in grouped)
-                    {
-                        try
-                        {
-                            var mtrl_list = item_list.Where(x => x.Code.Trim() == similar.ItemCode.Trim()).FirstOrDefault();
-                            var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
-                            var mname = mtrl_list != null ? mtrl_list.Name : "";
-                            var similarCodes = similar.ReferenceItemCodes.Where(code => item_list.Any(item => item.Code.Trim() == code.Trim())).ToList();
-
-                            if (mtrl > 0 && similarCodes.Count > 0)
-                            {
-                                using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
-                                {
-                                    ItemObj.LocateData(mtrl);
-                                    //Πίνακας CCCSIMILARITEMS
-                                    using (var mtrsimilar = ItemObj.GetTable("CCCSIMILARITEMS"))
-                                    {
-                                        foreach (var code in similarCodes)
-                                        {
-                                            var similarItem_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
-                                            var similarItem = similarItem_list != null ? similarItem_list.Id : 0;
-                                            var recNo1 = mtrsimilar.Find("SIMMTRL", similarItem);
-                                            if (recNo1 == -1)
-                                            {
-                                                mtrsimilar.Current.Append();
-                                                mtrsimilar.Current["SIMMTRL"] = similarItem;
-                                                mtrsimilar.Current["SIMILARITY"] = Convert.ToDouble(100) ;
-                                                mtrsimilar.Current.Post();
-                                            }
-                                        }
-                                    }
-                                    ItemObj.PostData();
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο Όμοιο Είδος «{similar.ItemCode}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void SetAddOns(List<AddOnRecord> exceldata, List<SqlData> item_list)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    var grouped = exceldata.GroupBy(r => r.ItemCode).Select(g => new AddOnGroup
-                    {
-                        ItemCode = g.Key,
-                        AddOnItemCodes = g.Select(r => r.AddOnItemCode).ToList()
-                    }).ToList();
-                    foreach (var similar in grouped)
-                    {
-                        try
-                        {
-                            var mtrl_list = item_list.Where(x => x.Code.Trim() == similar.ItemCode.Trim()).FirstOrDefault();
-                            var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
-                            var mname = mtrl_list != null ? mtrl_list.Name : "";
-                            var addonitemcodes = similar.AddOnItemCodes.Where(code => item_list.Any(item => item.Code.Trim() == code.Trim())).ToList();
-
-                            if (mtrl > 0 && addonitemcodes.Count > 0)
-                            {
-                                using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
-                                {
-                                    ItemObj.LocateData(mtrl);
-                                    //Πίνακας CCCADDONS
-                                    using (var mtraddon = ItemObj.GetTable("CCCADDONS"))
-                                    {
-                                        foreach (var code in addonitemcodes)
-                                        {
-                                            var addon_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
-                                            var addonItem = addon_list != null ? addon_list.Id : 0;
-                                            var recNo1 = mtraddon.Find("ADDONMTRL", addonItem);
-                                            if (recNo1 == -1)
-                                            {
-                                                mtraddon.Current.Append();
-                                                mtraddon.Current["ADDONMTRL"] = addonItem;
-                                                mtraddon.Current.Post();
-                                            }
-                                        }
-                                    }
-                                    ItemObj.PostData();
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _xSupport.Exception($"Πρόβλημα στο Όμοιο Είδος «{similar.ItemCode}»." + ex.Message);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _xSupport.Exception(ex.Message);
-                }
-            }
-        }
-        public void CreateUpdateAttributes(List<AttributeRecord> attributes)
-        {
+            var logs_remarks = "";
             if (attributes.Count() > 0)
             {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο
+                ProgressNotify(2, attributes.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
                 foreach (var attr in attributes)
                 {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
                     try
                     {
                         using (var AttributeObj = _xSupport.CreateModule("MTRATTRIBUTE;Attributes"))
@@ -1169,7 +1660,7 @@ namespace MothercareImportData.Services
                             if (attributeId > 0)
                             {
                                 AttributeObj.LocateData(attributeId);
-                                var name = attr.Translations.Any() ? attr.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description : (AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] !="" ? AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] : attr.Code);
+                                var name = attr.Translations.Any() ? attr.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description : (AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] != "" ? AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] : attr.Code);
                                 AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] = name;
                                 if (attr.Translations.Count > 0)
                                 {
@@ -1197,7 +1688,7 @@ namespace MothercareImportData.Services
                                         }
                                     }
                                 }
-                                if (attr.Values.Count>0)
+                                if (attr.Values.Count > 0)
                                 {
                                     foreach (var val in attr.Values)
                                     {
@@ -1223,9 +1714,9 @@ namespace MothercareImportData.Services
                                                 //mtrattributeln.Current.Post();
                                             }
 
-                                            if (val.Translations.Count>0)
+                                            if (val.Translations.Count > 0)
                                             {
-                                                foreach (var trnsln in val.Translations.OrderBy(x=>x.LanguageCode))
+                                                foreach (var trnsln in val.Translations.OrderBy(x => x.LanguageCode))
                                                 {
                                                     //Πίνακας ATTIBUTETRANSLN
                                                     using (var attributetrnsln = AttributeObj.GetTable("ATTIBUTETRANSLN"))
@@ -1311,13 +1802,21 @@ namespace MothercareImportData.Services
                     }
                     catch (Exception ex)
                     {
-                        _xSupport.Exception($"Πρόβλημα στο Attribute «{attr.Code}»." + ex.Message);
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Attribute «{attr.Code}»." + ex.Message + Environment.NewLine;
                     }
                 }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
             }
+            return logs_remarks;
         }
-        public void CreateUpdateProductAttributes(List<ProductAttributeRecord> productAttributes,List<SqlData> sqldata, List<AttributeRecord> attributes)
+        public string CreateUpdateProductAttributes(List<ProductAttributeRecord> productAttributes, List<SqlData> sqldata, List<AttributeRecord> attributes)
         {
+            var logs_remarks = "";
             // Implementation for creating or updating product attributes
             List<ProductAttributesGrouped> groupedResult = productAttributes.GroupBy(x => x.ProductCode).Select(productGroup => new ProductAttributesGrouped
             {
@@ -1343,10 +1842,16 @@ namespace MothercareImportData.Services
             }).ToList()
             }).ToList();
 
-            if (groupedResult.Count>0)
+            if (groupedResult.Count > 0)
             {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, groupedResult.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
                 foreach (var arrtibuteItem in groupedResult)
-                { 
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
                     var productcode = arrtibuteItem.ProductCode;
                     var mtrl = sqldata.Where(x => x.Obj == "item" && x.Code.Trim() == productcode.Trim()).FirstOrDefault()?.Id ?? 0;
                     var attributesitem = arrtibuteItem.Attributes;
@@ -1354,169 +1859,389 @@ namespace MothercareImportData.Services
                     {
                         using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
                         {
-                            ItemObj.LocateData(mtrl);
-                            using (var mtrattributes = ItemObj.GetTable("MTRLATTRIBUTES"))
+                            try
                             {
-                                foreach (var attribute in attributesitem)
+                                ItemObj.LocateData(mtrl);
+                                using (var mtrattributes = ItemObj.GetTable("MTRLATTRIBUTES"))
                                 {
-                                    var attribute_list = attributes.Where(x => x.Code.Trim() == attribute.AttributeCode.Trim()).FirstOrDefault();
-                                    var attributeId = attribute_list != null ? attribute_list.SoftOneId : 0;
-                                    if (attributeId > 0)
-                                    { 
-                                        var attributevalues = attribute.Values.FirstOrDefault();
-                                        var attributevalue_list = attribute_list.Values.Where(x => x.Code.Trim() == attributevalues.AttributeValueCode.Trim()).FirstOrDefault();
-                                        var attributevalueId = attributevalue_list != null ? attributevalue_list.SoftOneId : 0;
-                                        var recNo1 = mtrattributes.Find("MTRATTRIBUTE", attributeId);
-                                        if (recNo1 != -1 && Convert.ToInt32(mtrattributes.Current["MTRATTRIBUTELN"]) != attributevalueId)
+                                    foreach (var attribute in attributesitem)
+                                    {
+                                        try
                                         {
-                                            mtrattributes.Current["MTRATTRIBUTELN"] = attributevalueId;
-                                        }
-                                        else
-                                        {
-                                            mtrattributes.Current.Append();
-                                            mtrattributes.Current["MTRATTRIBUTE"] = attributeId;
-                                            if (attributevalueId > 0)
+                                            var attribute_list = attributes.Where(x => x.Code.Trim() == attribute.AttributeCode.Trim()).FirstOrDefault();
+                                            var attributeId = attribute_list != null ? attribute_list.SoftOneId : 0;
+                                            if (attributeId > 0)
                                             {
-                                                mtrattributes.Current["MTRATTRIBUTELN"] = attributevalueId;
-                                            }
-                                        }
-                                        var freetexttranslations = attributevalues.Translations;
-                                            //attributevalue_list.Translations;
-                                        foreach (var trns in freetexttranslations.OrderBy(x => x.LanguageCode))
-                                        {
-                                            //Πίνακας ATTIBUTETRANSLN
-                                            using (var attributefreetext = ItemObj.GetTable("CCCATTRIBUTEFREETEXT"))
-                                            {
-                                                var recTrNo1 = attributefreetext.Find("MTRATTRIBUTE;CCCLANGUAGE", attributeId, trns.LanguageCode);
-                                                if (recTrNo1 != -1)
+                                                var attributevalues = attribute.Values.FirstOrDefault();
+                                                var attributevalue_list = attribute_list.Values.Where(x => x.Code.Trim() == attributevalues.AttributeValueCode.Trim()).FirstOrDefault();
+                                                var attributevalueId = attributevalue_list != null ? attributevalue_list.SoftOneId : 0;
+                                                var recNo1 = mtrattributes.Find("MTRATTRIBUTE", attributeId);
+                                                if (recNo1 != -1 && Convert.ToInt32(mtrattributes.Current["MTRATTRIBUTELN"]) != attributevalueId)
                                                 {
-                                                    attributefreetext.Current["CCCLANGUAGE"] = trns.LanguageCode;
-                                                    attributefreetext.Current["FREETXT"] = trns.Description;
+                                                    mtrattributes.Current["MTRATTRIBUTELN"] = attributevalueId;
                                                 }
                                                 else
                                                 {
-                                                    attributefreetext.Current.Append();
-                                                    attributefreetext.Current["CCCLANGUAGE"] = trns.LanguageCode;
-                                                    attributefreetext.Current["FREETXT"] = trns.Description;
+                                                    mtrattributes.Current.Append();
+                                                    mtrattributes.Current["MTRATTRIBUTE"] = attributeId;
+                                                    if (attributevalueId > 0)
+                                                    {
+                                                        mtrattributes.Current["MTRATTRIBUTELN"] = attributevalueId;
+                                                    }
                                                 }
-                                                attributefreetext.Current.Post();
-                                            }
-                                        }
-                                        //
-                                        mtrattributes.Current.Post();
-                                        //prepei na diagrafo auta pou den vrisko?
-                                    }
-                                }
-                            }
-                            ItemObj.PostData();
-                        }
-                    }
-                }
-            }
-        }
-        public void SetItemTexts(List<ItemTextsRecord> exceldata, List<SqlData> item_list)
-        {
-            if (exceldata.Count() > 0)
-            {
-                try
-                {
-                    foreach (var text in exceldata)
-                    {
-                        try
-                        {
-                            var mtrl_list = item_list.Where(x => x.Code.Trim() == text.ItemCode.Trim()).FirstOrDefault();
-                            var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
-                            var mname = mtrl_list != null ? mtrl_list.Name : "";
-                            if (mtrl > 0)
-                            {
-                                using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
-                                {
-                                    ItemObj.LocateData(mtrl);
-                                    using (var descriptions = ItemObj.GetTable("CCCDESCRIPTIONS"))
-                                    {
-                                        foreach (var trns in text.Texts)
-                                        {
-                                            var recTrNo1 = -1;
-                                            for (var i  = 0; i < descriptions.Count; i++)
-                                            {
-                                                var testlang = Convert.ToInt32(descriptions[i, "CCCLANGUAGE"]);
-                                                if (testlang == trns.LanguageCode)
+                                                var freetexttranslations = attributevalues.Translations;
+                                                //attributevalue_list.Translations;
+                                                foreach (var trns in freetexttranslations.OrderBy(x => x.LanguageCode))
                                                 {
-                                                    recTrNo1 = i;
-                                                    break;
+                                                    //Πίνακας ATTIBUTETRANSLN
+                                                    using (var attributefreetext = ItemObj.GetTable("CCCATTRIBUTEFREETEXT"))
+                                                    {
+                                                        var recTrNo1 = attributefreetext.Find("MTRATTRIBUTE;CCCLANGUAGE", attributeId, trns.LanguageCode);
+                                                        if (recTrNo1 != -1)
+                                                        {
+                                                            attributefreetext.Current["CCCLANGUAGE"] = trns.LanguageCode;
+                                                            attributefreetext.Current["FREETXT"] = trns.Description;
+                                                        }
+                                                        else
+                                                        {
+                                                            attributefreetext.Current.Append();
+                                                            attributefreetext.Current["CCCLANGUAGE"] = trns.LanguageCode;
+                                                            attributefreetext.Current["FREETXT"] = trns.Description;
+                                                        }
+                                                        attributefreetext.Current.Post();
+                                                    }
                                                 }
-                                            }
-                                            descriptions.Current.Edit(recTrNo1);
-                                            //var recTrNo1 = descriptions.Find("MTRL;CCCLANGUAGE",mtrl, trns.LanguageCode);
-                                            if (recTrNo1 != -1)
-                                            {
-                                                descriptions.Current["CCCLANGUAGE"] = trns.LanguageCode;
-                                                descriptions.Current["ESHOPTITLE"] = trns.EshopTitle;
-                                                descriptions.Current["SMALLDESCR"] = trns.SmallDescription;
-                                                descriptions.Current["BIGDESCR"] = trns.LongDescription;
-                                                descriptions.Current["LABALTITLE"] = trns.LabelTitle;
-                                                descriptions.Current["LABALDESCR"] = trns.LabelDescription;
-                                                var textfeaturesandbenefits = trns.FeaturesAndBenefits;
-                                                var ishtml = Regex.IsMatch(textfeaturesandbenefits, @"<\s*(html|body|p|div|span|br|strong|b|i|em|ul|ol|li|table|tr|td|a|img|h[1-6])\b[^>]*>",RegexOptions.IgnoreCase);
-                                                if (!ishtml)
-                                                {
-                                                    textfeaturesandbenefits = System.Net.WebUtility.HtmlEncode(textfeaturesandbenefits);
-                                                    textfeaturesandbenefits = textfeaturesandbenefits.Replace("\r\n", "<br>").Replace("\n", "<br>").Replace("\r", "<br>");
-                                                    textfeaturesandbenefits = $"<p>{textfeaturesandbenefits}</p>";
-                                                }
-                                                var vBlobField = _xModule.Exec("CODE:ModuleIntf.GetField", descriptions.TablePtr, "FEATURESBENEFITSHTML");
-                                                var vBlobPointer = _xModule.Exec("CODE:SOHTMLDOC.CreateDoc", 1, textfeaturesandbenefits);
-                                                _xModule.Exec("CODE:SOHTMLDOC.SaveDoctoBlob", vBlobPointer, vBlobField);
-                                                descriptions.Current["FEATURESBENEFITSTXT"] = textfeaturesandbenefits;
+                                                //
+                                                mtrattributes.Current.Post();
+                                                //prepei na diagrafo auta pou den vrisko?
                                             }
                                             else
                                             {
-                                                descriptions.Current.Append();
-                                                descriptions.Current["CCCLANGUAGE"] = trns.LanguageCode;
-                                                descriptions.Current["ESHOPTITLE"] = trns.EshopTitle;
-                                                descriptions.Current["SMALLDESCR"] = trns.SmallDescription;
-                                                descriptions.Current["BIGDESCR"] = trns.LongDescription;
-                                                descriptions.Current["LABALTITLE"] = trns.LabelTitle;
-                                                descriptions.Current["LABALDESCR"] = trns.LabelDescription;
-                                                var textfeaturesandbenefits = trns.FeaturesAndBenefits;
-                                                var ishtml = Regex.IsMatch(textfeaturesandbenefits, @"<\s*(html|body|p|div|span|br|strong|b|i|em|ul|ol|li|table|tr|td|a|img|h[1-6])\b[^>]*>", RegexOptions.IgnoreCase);
-                                                if (!ishtml)
-                                                {
-                                                    textfeaturesandbenefits = System.Net.WebUtility.HtmlEncode(textfeaturesandbenefits);
-                                                    textfeaturesandbenefits = textfeaturesandbenefits.Replace("\r\n", "<br>").Replace("\n", "<br>").Replace("\r", "<br>");
-                                                    textfeaturesandbenefits = $"<p>{textfeaturesandbenefits}</p>";
-                                                }
-                                                var vBlobField = _xModule.Exec("CODE:ModuleIntf.GetField", descriptions.TablePtr, "FEATURESBENEFITSHTML");
-                                                var vBlobPointer = _xModule.Exec("CODE:SOHTMLDOC.CreateDoc", 1, textfeaturesandbenefits);
-                                                _xModule.Exec("CODE:SOHTMLDOC.SaveDoctoBlob", vBlobPointer, vBlobField);
-                                                descriptions.Current["FEATURESBENEFITSTXT"] = textfeaturesandbenefits;
+                                                logs_remarks = logs_remarks + $"Το Attribute «{attribute.AttributeCode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
                                             }
-                                            descriptions.Current.Post();
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            logs_remarks = logs_remarks + $"Πρόβλημα στο Είδος «{productcode}» και στο Attribute «{attribute.AttributeCode}»." + ex.Message + Environment.NewLine;
                                         }
                                     }
-                                    ItemObj.PostData();
+                                }
+                                ItemObj.PostData();
+                            }
+                            catch (Exception ex)
+                            {
+                                logs_remarks = logs_remarks + $"Πρόβλημα στο Είδος «{productcode}»" + ex.Message + Environment.NewLine;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        logs_remarks = logs_remarks + $"Το Είδος «{productcode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public List<NidRecord> GetNids()
+        {
+            var sqldata = new List<NidRecord>();
+            try
+            {
+                var query = "SELECT M.MTRL,I.STORE,M.CODE,I.NID,I.INSDATE FROM MTRL M INNER JOIN CCCNID I ON I.MTRL=M.MTRL";
+                using (var ds = _xSupport.GetSQLDataSet(query, null))
+                {
+                    try
+                    {
+                        if (ds.Count > 0)
+                        {
+                            for (int i = 0; i < ds.Count; i++)
+                            {
+                                var itemCode = ds.GetAsString(i, "CODE");
+                                var storeId = ds.GetAsInteger(i, "STORE");
+                                var nid = ds.GetAsInteger(i, "NID");
+                                var insdate = ds.GetAsDateTime(i, "INSDATE");
+                                NidRecord nidRecord = sqldata.FirstOrDefault(x => x.ItemCode == itemCode);
+                                if (nidRecord == null)
+                                {
+                                    nidRecord = new NidRecord
+                                    {
+                                        ItemCode = itemCode,
+                                        NidStores = new List<NidStores>()
+                                    };
+                                    sqldata.Add(nidRecord);
+                                }
+                                // Προσθέτουμε το NidStores στον NidRecord
+                                if (!nidRecord.NidStores.Any(x => x.StoreId == storeId))
+                                {
+                                    nidRecord.NidStores.Add(new NidStores
+                                    {
+                                        StoreId = storeId,
+                                        Nid = nid,
+                                        InsDate = insdate
+                                    });
                                 }
                             }
                         }
-                        catch (Exception ex)
+                        return sqldata;
+                    }
+                    catch (Exception ex)
+                    {
+                        return sqldata;
+                        throw new Exception(ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return sqldata;
+                throw new Exception(ex.Message);
+            }
+        }
+        public string SetAddOns(List<AddOnRecord> exceldata, List<SqlData> item_list)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                var grouped = exceldata.GroupBy(r => r.ItemCode).Select(g => new AddOnGroup
+                {
+                    ItemCode = g.Key,
+                    AddOnItemCodes = g.Select(r => r.AddOnItemCode).ToList()
+                }).ToList();
+
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, grouped.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var addon in grouped)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    try
+                    {
+                        var mtrl_list = item_list.Where(x => x.Code.Trim() == addon.ItemCode.Trim()).FirstOrDefault();
+                        var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
+                        var mname = mtrl_list != null ? mtrl_list.Name : "";
+                        var addonitemcodes = addon.AddOnItemCodes.Where(code => item_list.Any(item => item.Code.Trim() == code.Trim())).ToList();
+
+                        if (mtrl > 0 && addonitemcodes.Count > 0)
                         {
-                            _xSupport.Exception($"Πρόβλημα στο κείμενο Είδους «{text.ItemCode}»." + ex.Message);
+                            using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                            {
+                                ItemObj.LocateData(mtrl);
+                                using (var mtraddon = ItemObj.GetTable("CCCADDONS"))
+                                {
+                                    foreach (var code in addonitemcodes)
+                                    {
+                                        var addon_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
+                                        var addonItem = addon_list != null ? addon_list.Id : 0;
+                                        var recNo1 = mtraddon.Find("ADDONMTRL", addonItem);
+                                        if (recNo1 == -1)
+                                        {
+                                            mtraddon.Current.Append();
+                                            mtraddon.Current["ADDONMTRL"] = addonItem;
+                                            mtraddon.Current.Post();
+                                        }
+                                    }
+                                }
+                                ItemObj.PostData();
+                            }
+                        }
+                        else
+                        {
+                            logs_remarks = logs_remarks + $"Το Είδος «{addon.ItemCode}» δεν βρέθηκε." + Environment.NewLine;
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο Όμοιο Είδος «{addon.ItemCode}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public string SetItemTexts(List<ItemTextsRecord> exceldata, List<SqlData> item_list)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var text in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    try
+                    {
+                        var mtrl_list = item_list.Where(x => x.Code.Trim() == text.ItemCode.Trim()).FirstOrDefault();
+                        var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
+                        var mname = mtrl_list != null ? mtrl_list.Name : "";
+                        if (mtrl > 0)
+                        {
+                            using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                            {
+                                ItemObj.LocateData(mtrl);
+                                using (var descriptions = ItemObj.GetTable("CCCDESCRIPTIONS"))
+                                {
+                                    foreach (var trns in text.Texts)
+                                    {
+                                        var recTrNo1 = -1;
+                                        for (var i = 0; i < descriptions.Count; i++)
+                                        {
+                                            var testlang = Convert.ToInt32(descriptions[i, "CCCLANGUAGE"]);
+                                            if (testlang == trns.LanguageCode)
+                                            {
+                                                recTrNo1 = i;
+                                                break;
+                                            }
+                                        }
+                                        descriptions.Current.Edit(recTrNo1);
+                                        //var recTrNo1 = descriptions.Find("MTRL;CCCLANGUAGE",mtrl, trns.LanguageCode);
+                                        if (recTrNo1 != -1)
+                                        {
+                                            descriptions.Current["CCCLANGUAGE"] = trns.LanguageCode;
+                                            descriptions.Current["ESHOPTITLE"] = trns.EshopTitle;
+                                            descriptions.Current["SMALLDESCR"] = trns.SmallDescription;
+                                            descriptions.Current["BIGDESCR"] = trns.LongDescription;
+                                            descriptions.Current["LABALTITLE"] = trns.LabelTitle;
+                                            descriptions.Current["LABALDESCR"] = trns.LabelDescription;
+                                            var textfeaturesandbenefits = trns.FeaturesAndBenefits;
+                                            var ishtml = Regex.IsMatch(textfeaturesandbenefits, @"<\s*(html|body|p|div|span|br|strong|b|i|em|ul|ol|li|table|tr|td|a|img|h[1-6])\b[^>]*>", RegexOptions.IgnoreCase);
+                                            if (!ishtml)
+                                            {
+                                                textfeaturesandbenefits = System.Net.WebUtility.HtmlEncode(textfeaturesandbenefits);
+                                                textfeaturesandbenefits = textfeaturesandbenefits.Replace("\r\n", "<br>").Replace("\n", "<br>").Replace("\r", "<br>");
+                                                textfeaturesandbenefits = $"<p>{textfeaturesandbenefits}</p>";
+                                            }
+                                            var vBlobField = _xModule.Exec("CODE:ModuleIntf.GetField", descriptions.TablePtr, "FEATURESBENEFITSHTML");
+                                            var vBlobPointer = _xModule.Exec("CODE:SOHTMLDOC.CreateDoc", 1, textfeaturesandbenefits);
+                                            _xModule.Exec("CODE:SOHTMLDOC.SaveDoctoBlob", vBlobPointer, vBlobField);
+                                            descriptions.Current["FEATURESBENEFITSTXT"] = textfeaturesandbenefits;
+                                        }
+                                        else
+                                        {
+                                            descriptions.Current.Append();
+                                            descriptions.Current["CCCLANGUAGE"] = trns.LanguageCode;
+                                            descriptions.Current["ESHOPTITLE"] = trns.EshopTitle;
+                                            descriptions.Current["SMALLDESCR"] = trns.SmallDescription;
+                                            descriptions.Current["BIGDESCR"] = trns.LongDescription;
+                                            descriptions.Current["LABALTITLE"] = trns.LabelTitle;
+                                            descriptions.Current["LABALDESCR"] = trns.LabelDescription;
+                                            var textfeaturesandbenefits = trns.FeaturesAndBenefits;
+                                            var ishtml = Regex.IsMatch(textfeaturesandbenefits, @"<\s*(html|body|p|div|span|br|strong|b|i|em|ul|ol|li|table|tr|td|a|img|h[1-6])\b[^>]*>", RegexOptions.IgnoreCase);
+                                            if (!ishtml)
+                                            {
+                                                textfeaturesandbenefits = System.Net.WebUtility.HtmlEncode(textfeaturesandbenefits);
+                                                textfeaturesandbenefits = textfeaturesandbenefits.Replace("\r\n", "<br>").Replace("\n", "<br>").Replace("\r", "<br>");
+                                                textfeaturesandbenefits = $"<p>{textfeaturesandbenefits}</p>";
+                                            }
+                                            var vBlobField = _xModule.Exec("CODE:ModuleIntf.GetField", descriptions.TablePtr, "FEATURESBENEFITSHTML");
+                                            var vBlobPointer = _xModule.Exec("CODE:SOHTMLDOC.CreateDoc", 1, textfeaturesandbenefits);
+                                            _xModule.Exec("CODE:SOHTMLDOC.SaveDoctoBlob", vBlobPointer, vBlobField);
+                                            descriptions.Current["FEATURESBENEFITSTXT"] = textfeaturesandbenefits;
+                                        }
+                                        descriptions.Current.Post();
+                                    }
+                                }
+                                ItemObj.PostData();
+                            }
+                        }
+                        else
+                        {
+                            logs_remarks = logs_remarks + $"Το Είδος «{text.ItemCode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο κείμενο Είδους «{text.ItemCode}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
+        public List<TagRecord> GetSqlTags()
+        {
+            var tags = new List<TagRecord>();
+            var query = $@"SELECT CCCTAGS,CODE,NAME,FROMDATE,TODATE,ISACTIVE FROM CCCTAGS WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId}";
+            using (var ds = _xSupport.GetSQLDataSet(query, null))
+            {
+                try
+                {
+                    if (ds.Count > 0)
+                    {
+                        for (int i = 0; i < ds.Count; i++)
+                        {
+                            var tadId = ds.GetAsInteger(i, "CCCTAGS");
+                            var items = new List<TagItems>();
+                            var queryln = $@"SELECT L.MTRL,M.CODE FROM CCCTAGSNL L INNER JOIN MTRL M ON M.MTRL=L.MTRL WHERE L.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND L.CCCTAGS={tadId}";
+                            using (var dsln = _xSupport.GetSQLDataSet(queryln, null))
+                            {
+                                if (dsln.Count > 0)
+                                {
+                                    for (int j = 0; j < dsln.Count; j++)
+                                    {
+                                        var resitem = new TagItems
+                                        {
+                                            ItemCode = dsln.GetAsString(j, "CODE")
+                                        };
+                                        items.Add(resitem);
+                                    }
+                                }
+                            }
+                            var res = new TagRecord
+                            {
+                                SoftoneId = ds.GetAsInteger(i, "CCCTAGS"),
+                                Code = ds.GetAsString(i, "CODE"),
+                                Description = ds.GetAsString(i, "NAME"),
+                                DateFrom = ds.GetAsDateTime(i, "FROMDATE"),
+                                DateTo = ds.GetAsDateTime(i, "TODATE"),
+                                Active = ds.GetAsInteger(i, "ISACTIVE") == 1 ? true : false,
+                                Items = items
+                            };
+                            tags.Add(res);
+                        }
+                    }
+                    return tags;
                 }
                 catch (Exception ex)
                 {
-                    _xSupport.Exception(ex.Message);
+                    return tags;
+                    throw new Exception(ex.Message);
                 }
             }
         }
-
-        public void CreateTag(List<TagRecord> exceldata, List<SqlData> item_list)
+        public string CreateTag(List<TagRecord> exceldata, List<SqlData> item_list, List<TagRecord> softonetags_list)
         {
+            var logs_remarks = "";
             if (exceldata.Count > 0)
-            { 
-                foreach(var tag in exceldata)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var tag in exceldata)
                 {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
                     var code = tag.Code;
                     var name = tag.Description;
                     var fromdate = tag.DateFrom;
@@ -1524,15 +2249,29 @@ namespace MothercareImportData.Services
                     var isactive = tag.Active;
                     var itemlist = tag.Items;
                     var checkitems = itemlist.Where(x => item_list.Any(z => z.Code.Trim() == x.ItemCode.Trim())).ToList();
+                    var tagID = softonetags_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault()?.SoftoneId ?? 0;
                     if (checkitems.Count > 0)
                     {
+                        var itemnotfound = itemlist.Where(x => !item_list.Any(z => z.Code.Trim() == x.ItemCode.Trim())).ToList();
+                        if (itemnotfound.Count > 0)
+                        {
+                            var notfoundcodes = string.Join(", ", itemnotfound.Select(x => x.ItemCode));
+                            logs_remarks = logs_remarks + $"Το Tag «{code}» έχει μη έγκυρα είδη: {notfoundcodes}." + Environment.NewLine;
+                        }
                         try
                         {
                             using (var ImpObj = _xSupport.CreateModule("CCCTAGS"))
                             {
-                                ImpObj.InsertData();
+                                if (tagID > 0)
+                                {
+                                    ImpObj.LocateData(tagID);
+                                }
+                                else
+                                {
+                                    ImpObj.InsertData();
+                                    ImpObj.GetTable("CCCTAGS").Current["CODE"] = code;
+                                }
                                 ImpObj.GetTable("CCCTAGS").Current["ISACTIVE"] = isactive ? 1 : 0;
-                                ImpObj.GetTable("CCCTAGS").Current["CODE"] = code;
                                 ImpObj.GetTable("CCCTAGS").Current["NAME"] = name;
                                 ImpObj.GetTable("CCCTAGS").Current["FROMDATE"] = fromdate;
                                 ImpObj.GetTable("CCCTAGS").Current["TODATE"] = todate;
@@ -1561,298 +2300,92 @@ namespace MothercareImportData.Services
                         }
                         catch (Exception ex)
                         {
-                            _xSupport.Exception($"Πρόβλημα στο Tag «{code}»." + ex.Message);
+                            logs_remarks = logs_remarks + $"Πρόβλημα στο Tag «{code}»." + ex.Message + Environment.NewLine;
                         }
                     }
-                }
-            }
-        }
-        public void SetNid (List<NidRecord> exceldata, List<SqlData> item_list)
-        { 
-            if(exceldata.Count > 0)
-            {
-                foreach (var nid in exceldata)
-                { 
-                    var itemcode = nid.ItemCode;
-                    var mtrl = item_list.Where(x => x.Code.Trim() == itemcode.Trim()).FirstOrDefault()?.Id ?? 0;
-                    if (mtrl > 0)
+                    else
                     {
-                        using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
-                        {
-                            ItemObj.LocateData(mtrl);
-                            using (var mtrnid = ItemObj.GetTable("CCCNID"))
-                            {
-                                foreach (var store in nid.NidStores)
-                                {
-                                    var storeId = store.StoreId;
-                                    var recNo1 = mtrnid.Find("STORE", storeId);
-                                    if (recNo1 == -1)
-                                    {
-                                        mtrnid.Current.Append();
-                                        mtrnid.Current["STORE"] = storeId;
-                                        mtrnid.Current["NID"] = store.Nid;
-                                        mtrnid.Current["INSDATE"] = store.InsDate;
-                                        mtrnid.Current.Post();
-                                    }
-                                    else
-                                    {
-                                        mtrnid.Current["NID"] = store.Nid;
-                                        mtrnid.Current["INSDATE"] = store.InsDate;
-                                        mtrnid.Current.Post();
-                                    }
-                                }
-                            }
-                            ItemObj.PostData();
-                        }
+                        logs_remarks = logs_remarks + $"Το Tag «{code}» δεν έχει έγκυρα είδη." + Environment.NewLine;
                     }
                 }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
             }
+            return logs_remarks;
         }
-        public void CreateUpdateItems(List<ItemMasterRecord> exceldata, List<SqlData> sqlData)
+        public string SetNid(List<NidRecord> exceldata, List<SqlData> item_list)
         {
             var logs_remarks = "";
             if (exceldata.Count > 0)
             {
-                var item_list = sqlData.Where(x => x.Obj == "item").ToList();
-                var theme_list = sqlData.Where(x => x.Obj == "theme").ToList();
-                var division_list = sqlData.Where(x => x.Obj == "division").ToList();
-                var department_list = sqlData.Where(x => x.Obj == "department").ToList();
-                var subdepartment_list = sqlData.Where(x => x.Obj == "subdept").ToList();
-                var class_list = sqlData.Where(x => x.Obj == "class").ToList();
-                var size_list = sqlData.Where(x => x.Obj == "size").ToList();
-                var color_list = sqlData.Where(x => x.Obj == "color").ToList();
-                var brand_list = sqlData.Where(x => x.Obj == "brand").ToList();
-                var intrastat_list = sqlData.Where(x => x.Obj == "intrastat").ToList();
-                var season_list = sqlData.Where(x => x.Obj == "season").ToList();
-                var collection_list = sqlData.Where(x => x.Obj == "collection").ToList();
-                var commercialcollection_list = sqlData.Where(x => x.Obj == "commercialcollection").ToList();
-                var vat_list = sqlData.Where(x => x.Obj == "vat").ToList();
-                var busunit_list = sqlData.Where(x => x.Obj == "busunit").ToList();
-                var itemtype_list = sqlData.Where(x => x.Obj == "itemtype").ToList();
-                var accountingtype_list = sqlData.Where(x => x.Obj == "accountingtype").ToList();
-                var country_list = sqlData.Where(x => x.Obj == "country").ToList();
-                var supplier_list = sqlData.Where(x => x.Obj == "supplier").ToList();
-                var sizeguide_list = sqlData.Where(x => x.Obj == "sizeguide").ToList();
-                var seasonality_list = sqlData.Where(x => x.Obj == "seasonality").ToList();
-                var house_list = sqlData.Where(x => x.Obj == "house").ToList();
-
-                using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                foreach (var nid in exceldata)
                 {
-                    var counter = 0;
-                    foreach (var item in exceldata)
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    try
                     {
-                        counter++;
-                        try
+                        var itemcode = nid.ItemCode;
+                        var mtrl = item_list.Where(x => x.Code.Trim() == itemcode.Trim()).FirstOrDefault()?.Id ?? 0;
+                        if (mtrl > 0)
                         {
-                            var mtrl_list = item_list.Where(x => x.Code.Trim() == item.Code.Trim()).FirstOrDefault();
-                            var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
-                            if (mtrl == 0)
-                            {
-                                ItemObj.InsertData();
-                                ItemObj.GetTable("MTRL").Current["CODE"] = item.Code;
-                                ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] = 2; //0=Όλοι, 1=Dpam, 2=Mothercare
-                            }
-                            else
+                            using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
                             {
                                 ItemObj.LocateData(mtrl);
-                                var itemcompany = Convert.ToInt32(ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] != DBNull.Value ? ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] : 0);
-                                if (itemcompany == 1)
+                                using (var mtrnid = ItemObj.GetTable("CCCNID"))
                                 {
-                                    ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] = 0; //0=Όλοι, 1=Dpam, 2=Mothercare
-                                }
-                            }
-                            ItemObj.GetTable("MTRL").Current["NAME"] = item.Name;
-
-                            ItemObj.GetTable("MTRL").Current["CODE2"] = item.TaxCode;
-                            ItemObj.GetTable("MTRL").Current["CCCASSORTMENTDESCR"] = item.AssortmentDescription;
-                            ItemObj.GetTable("MTRL").Current["CCCSUPPLIERCODE"] = item.SupplierCode;
-
-                            ItemObj.GetTable("MTRL").Current["NAME1"] = item.EnglishDescription;
-                            ItemObj.GetTable("MTRL").Current["REMARKS"] = item.Comments;
-                            var mtrunit = 0;
-                            switch(item.UnitOfMeasure)
-                            {
-                                case 1 /*ΤΕΜΑΧΙΟ*/ : mtrunit = 101 /*Τεμ.*/; break;
-                                case 2 /*ΜΕΤΡΟ*/ : mtrunit = 120 /*Μέτρα*/; break;
-                                case 4 /*ΚΙΛΑ*/: mtrunit = 150 /*Κιλά*/; break;
-                                case 6 /*Κ.ΜΕΤΡΑ*/: mtrunit = 140 /*Κ.Μέτ*/; break;
-                                default: mtrunit = 101; break;
-                            }
-                            ItemObj.GetTable("MTRL").Current["MTRUNIT1"] = mtrunit;
-                            ItemObj.GetTable("MTRL").Current["MTRUNIT2"] = item.PackageQuantity > 0 ? 108 : 101;
-                            ItemObj.GetTable("MTRL").Current["MTRUNIT3"] = mtrunit;
-                            ItemObj.GetTable("MTRL").Current["MTRUNIT4"] = mtrunit;
-                            ItemObj.GetTable("MTRL").Current["MU21"] = item.PackageQuantity > 0 ? Convert.ToDouble(item.PackageQuantity) : 1;
-                            ItemObj.GetTable("MTRL").Current["MU31"] = Convert.ToDouble(1);
-                            ItemObj.GetTable("MTRL").Current["MU41"] = Convert.ToDouble(1);
-                            ItemObj.GetTable("MTRL").Current["MU12MODE"] = 1;
-                            ItemObj.GetTable("MTRL").Current["MU13MODE"] = 1;
-                            ItemObj.GetTable("MTRL").Current["MU14MODE"] = 1;
-                            ItemObj.GetTable("MTRL").Current["CCCCOMPOSEDOFQTY"] = item.ComposedOfQuantity;
-
-                            var divisionId = division_list.Where(x => x.Code.Trim() == item.Division.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["CCCDIVISION"] = divisionId;
-
-                            var departmentId = department_list.Where(x => x.Code.Trim() == item.Department.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["CCCDEPARTMENT"] = departmentId;
-
-                            var subdeptId = subdepartment_list.Where(x => x.Code.Trim() == item.Department.ToString().Trim() + "-" + item.Subdept.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["CCCSUBDEPT"] = subdeptId;
-                            var classId = class_list.Where(x => x.Code.Trim() == item.Department.ToString().Trim() + "-" + item.Subdept.ToString().Trim() + "-" + item.Class.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["CCCCLASS"] = classId;
-
-                            ItemObj.GetTable("MTRL").Current["CCCYEAR"] = item.Year;
-                            ItemObj.GetTable("MTRL").Current["CCCQUARTER"] = item.Season;
-                            ItemObj.GetTable("MTRL").Current["CCCCURYEAR"] = item.StatisticalYear;
-
-                            var mtrmanufacturerId = theme_list.Where(x => x.Name.Trim() == item.StyleNo.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["MTRMANFCTR"] = mtrmanufacturerId;
-
-                            //var colorId = 0;//item.Color;
-                            //ItemObj.GetTable("MTRL").Current["CCCCOLOR"] = colorId;
-
-                            var sizeguideId = sizeguide_list.Where(x => x.Code.Trim() == item.SizeGuide.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["CCCSIZEGUIDE"] = sizeguideId;
-
-                            var sizeId = size_list.Where(x=>x.Code.Trim() == item.Size.ToString().Trim() && x.Flg1 == sizeguideId).FirstOrDefault()?.Id ?? null;//item.Size;
-                            ItemObj.GetTable("MTRL").Current["CCCMCSIZE"] = sizeId;
-
-                            var brandId = brand_list.Where(x => x.Code.Trim() == "MC" + item.Brand.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["CCCBRAND"] = brandId;
-
-                            var houseId = house_list.Where(x => x.Code.Trim() == item.House.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["CCCHOUSE"] = houseId;
-
-                            var vat = 0;
-                            switch (item.VatCategory)
-                            {
-                                case 1 /*Υψηλός Συντελεστής*/ : vat = 1410 /*24*/; break;
-                                case 2 /*Χαμηλός Συντελεστής*/ : vat = 1060 /*6*/; break;
-                                case 3 /*Μεσαίος Συντελεστής*/: vat = 1131 /*13*/; break;
-                                case 4 /*Μηδενικός Συντελεστής*/: vat = 0 /*0*/; break;
-                                default: vat = 1410; break;
-                            }
-                            ItemObj.GetTable("MTRL").Current["VAT"] = vat;
-
-                            ItemObj.GetTable("MTRL").Current["CCCFASI"] = item.Phase;
-
-                            var seasonalityId = seasonality_list.Where(x => x.Code.Trim() == item.Seasonality.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["CCCSEASONALITY"] = seasonalityId;
-
-                            ItemObj.GetTable("MTRL").Current["CCCLISTUP"] = item.ListUp;
-
-                            if (item.Outlet != null)
-                            {
-                                ItemObj.GetTable("MTRL").Current["CCCOUTLET"] = item.Outlet;
-                            }
-
-                            ItemObj.GetTable("MTRL").Current["GWEIGHT"] = item.NetWeight;
-
-                            var countryId = country_list.Where(x => x.Code.Trim() == item.CountryOfOrigin.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["COUNTRY"] = countryId;
-
-                            var intrastatId = intrastat_list.Where(x => x.Code.Trim() == item.Intrastat.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["INTRASTAT"] = intrastatId;
-
-                            ItemObj.GetTable("MTRL").Current["ISACTIVE"] = 1;
-
-                            ItemObj.GetTable("MTRL").Current["CCCMSSTATUS"] = item.Status;
-
-                            var collectionId = collection_list.Where(x => x.Code.Trim() == item.Collection.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTREXTRA").Current["UTBL04"] = collectionId;
-
-                            var commercialcollectionId = commercialcollection_list.Where(x => x.Code.Trim() == item.CommercialCollection.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["CCCCOMMERCIALCOLLECTION"] = commercialcollectionId;
-
-                            var buId = busunit_list.Where(x => x.Code.Trim() == "MC" + item.Bu.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["BUSUNITS"] = buId;
-
-                            var itemtypeId = itemtype_list.Where(x => x.Code.Trim() == "MC" + item.ItemType.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["MTRCATEGORY"] = itemtypeId;
-
-                            var accountingtypeId = accountingtype_list.Where(x => x.Code.Trim() == "MC" + item.AccountingType.ToString().Trim()).FirstOrDefault()?.Id ?? null;
-                            ItemObj.GetTable("MTRL").Current["MTRACN"] = accountingtypeId;
-
-                            ItemObj.GetTable("MTREXTRA").Current["VARCHAR01"] = item.ImagePath;
-                            ItemObj.GetTable("MTREXTRA").Current["BOOL02"] = item.RestockWithPackage;
-                            ItemObj.GetTable("MTRL").Current["CCCLIGUARANTYMONTHS"] = item.WarrantyMonths;
-                            ItemObj.GetTable("MTRL").Current["CCCESHOPMASTERCODE"] = item.EshopMasterCode;
-                            ItemObj.GetTable("MTRL").Current["CCCHEIGHT"] = item.Height;
-                            ItemObj.GetTable("MTRL").Current["CCCLENGTH"] = item.Length;
-                            ItemObj.GetTable("MTRL").Current["CCCWIDTH"] = item.Width;
-                            ItemObj.GetTable("MTRL").Current["VOLUME"] = item.ItemCubeM;
-                            ItemObj.GetTable("MTREXTRA").Current["VARCHAR02"] = item.PhotoName;
-                            ItemObj.GetTable("MTRL").Current["CCCWORKINPROGRESSINGR"] = item.WorkInProgressInGr; 
-                            ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINGR"] = item.ToBePublishedInGr;
-                            ItemObj.GetTable("MTRL").Current["CCCTOBEUNPUBLISHEDINGR"] = item.ToBeUnpublishedInGr;
-                            ItemObj.GetTable("MTRL").Current["CCCHASTRANSLATION"] = item.HasTranslation;
-                            ItemObj.GetTable("MTRL").Current["CCCISPUBLISHEDINGR"] = item.IsPublishedInGr;
-                            ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINSKROUTZ"] = item.ToBePublishedInSkroutz;
-                            ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINPUBLIC"] = item.ToBePublishedInPublic;
-
-
-                            ////Πίνακας MTRSUBSTITUTE
-                            //using (var mtrsubstitute = ItemObj.GetTable("MTRSUBSTITUTE"))
-                            //{
-                            //    mtrsubstitute.Current.Append();
-                            //    mtrsubstitute.Current["CODE"] = item.code1;
-                            //    mtrsubstitute.Current["NAME"] = item.name;
-                            //    mtrsubstitute.Current["QTY1"] = Convert.ToDouble(1);
-                            //    mtrsubstitute.Current["QTY2"] = Convert.ToDouble(1);
-                            //    mtrsubstitute.Current.Post();
-                            //}
-                            ////Πίνακας MTRSUPCODE
-                            //var supplier_id = supplier_list.Where(x => x.Code.ToUpper() == item.mtrsupcode.ToUpper()).FirstOrDefault()?.Id ?? 0;
-                            //if (supplier_id > 0 && item.vendorno != "")
-                            //{
-                            //    using (var mtrsupcode = ItemObj.GetTable("MTRSUPCODE"))
-                            //    {
-                            //        mtrsupcode.Current.Append();
-                            //        mtrsupcode.Current["TRDR"] = supplier_id;
-                            //        var supcode = (item.theme + "_" + item.color + "_" + item.size.Replace(",", "."));
-                            //        //var supcode = (item.vendorno + "_" + mtrl.ToString());
-                            //        supcode = supcode.Substring(0, (supcode.Length >= 50 ? 50 : supcode.Length));
-                            //        mtrsupcode.Current["MTRSUPCODE"] = supcode;
-                            //        mtrsupcode.Current["CCCVENDORSIZE"] = item.suppliersize;
-                            //        mtrsupcode.Current["CCCVENDORCODE"] = item.vendorno;
-                            //        mtrsupcode.Current.Post();
-                            //    }
-                            //}
-                            var newId =ItemObj.PostData();
-                            newId = newId < 0 ? mtrl : newId;
-
-                            //Images
-                            if (item.ImagePath != "" && newId>0)
-                            {
-                                var queryimage = $@"SELECT REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,SODATA,DEFXTRDOC,XDOCTYPE,SOMD FROM XTRDOCDATA 
-                                                    WHERE REFOBJID={newId} AND SOSOURCE = 51 AND LNUM=0 AND SOFNAME ='{item.ImagePath}' ";
-                                using (var ds = _xSupport.GetSQLDataSet(queryimage, null))
-                                { 
-                                    try
+                                    foreach (var store in nid.NidStores)
                                     {
-                                        if (ds.Count == 0)
+                                        var storeId = store.StoreId;
+                                        var recNo1 = mtrnid.Find("STORE", storeId);
+                                        if (recNo1 == -1)
                                         {
-                                            var execsql = "";
-                                            execsql = $"DELETE FROM XTRDOCDATA WHERE REFOBJID={newId} AND SOSOURCE = 51; ";
-                                            execsql = execsql + $@"INSERT INTO XTRDOCDATA (REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,NAME,SOFNAME,DEFXTRDOC,XDOCTYPE,SOMD) 
-                                                                    VALUES ({newId},51 ,0 ,1 ,0 ,'{item.PhotoName}','{item.ImagePath}' ,0 ,0 ,0); ";
-                                            _xSupport.ExecuteSQL(execsql);
+                                            mtrnid.Current.Append();
+                                            mtrnid.Current["STORE"] = storeId;
+                                            mtrnid.Current["NID"] = store.Nid;
+                                            //mtrnid.Current["INSDATE"] = store.InsDate;
+                                            if (storeId == 11)
+                                            {
+                                                mtrnid.Current["WEBPAGE"] = "https://www.mothercare.gr/product/" + store.Nid.ToString();
+                                            }
+                                            mtrnid.Current.Post();
+                                        }
+                                        else
+                                        {
+                                            mtrnid.Current["NID"] = store.Nid;
+                                            mtrnid.Current["INSDATE"] = store.InsDate;
+                                            mtrnid.Current.Post();
                                         }
                                     }
-                                    catch (Exception ex)
-                                    {
-                                        throw new Exception(ex.Message);
-                                    }
                                 }
+                                ItemObj.PostData();
                             }
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            _xSupport.Exception($"Πρόβλημα στο είδος με Κωδικό «{item.Code}». " + ex.Message);
+                            logs_remarks = logs_remarks + $"Το Είδος «{nid.ItemCode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στο NID του Είδους «{nid.ItemCode}»." + ex.Message + Environment.NewLine;
+                    }
                 }
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
             }
+            return logs_remarks;
         }
     }
 }

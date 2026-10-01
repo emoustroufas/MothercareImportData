@@ -14,6 +14,7 @@ namespace MothercareImportData.Models
         public DateTime? DateFrom { get; set; }//HMER_APO
         public DateTime? DateTo { get; set; }//HMER_EOS
         public bool Active { get; set; }//ENERG_SW
+        public int SoftoneId { get; internal set; }
     }
     public class TagItems
     {

@@ -61,7 +61,7 @@ namespace MothercareImportData
             {
                 XSupport.Exception(ex.Message);
             }
-        }
+        }       
         public override void BeforePost()
         {
             base.BeforePost();
@@ -96,6 +96,7 @@ namespace MothercareImportData
                 //Eshop Data
                 //Attributes, Tags, AddOns, SimilarItems δεν χρειάζονται να δημιουργούνται πριν τα Items γιατί δεν έχουν κωδικό είδους για να συνδεθούν. Θα δημιουργούνται μετά τα Items.
                 //Attributes
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Attribute ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 excelData = excelClient.ExportExcelData("attributes");
                 if (excelData.Count > 0)
                 {
@@ -190,10 +191,13 @@ namespace MothercareImportData
                     }
                     if (result.Count > 0)
                     {
-                        softoneService.CreateUpdateAttributes(result);
+                        logs_remarks = logs_remarks + $"Εισαγωγή Attribute ({result.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateUpdateAttributes(result);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                     }
                 }
                 //Attributes per product
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Attributes Per Product ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 excelData = excelClient.ExportExcelData("attributes per product");
                 if (excelData.Count > 0)
                 {
@@ -202,7 +206,7 @@ namespace MothercareImportData
                 excelProductAttributes = ExcelFileService.GetExcelData<ProductAttributeRecord>(excelData, firstLineInUse);
                 if (excelProductAttributes.Count > 0)
                 {
-                    var softOneAttributes = softoneService.GetSqlAttributeData();
+                    var softOneAttributes = softoneService.GetSqlAttributeData2();
                     var softOneProductAttributes = softoneService.GetSqlProductAttributeData();
                     var result = new List<ProductAttributeRecord>();
                     foreach (var excel in excelProductAttributes)
@@ -232,10 +236,13 @@ namespace MothercareImportData
                     }
                     if (result.Count > 0)
                     {
-                        softoneService.CreateUpdateProductAttributes(result, sqlData, softOneAttributes);
+                        logs_remarks = logs_remarks + $"Εισαγωγή Attributes Per Product ({result.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateUpdateProductAttributes(result, sqlData, softOneAttributes);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                     }
                 }
                 //AddOns
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Add Ons ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 excelData = excelClient.ExportExcelData("add ons");
                 if (excelData.Count > 0)
                 {
@@ -244,9 +251,12 @@ namespace MothercareImportData
                 addOns = ExcelFileService.GetExcelData<AddOnRecord>(excelData, firstLineInUse);
                 if (addOns.Count > 0)
                 {
-                    softoneService.SetAddOns(addOns, item_list);
+                    logs_remarks = logs_remarks + $"Εισαγωγή Add Ons ({addOns.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    var execlog = softoneService.SetAddOns(addOns, item_list);
+                    logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                 }
                 //κείμενα
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Κειμένων ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 excelData = excelClient.ExportExcelData("κείμενα");
                 if (excelData.Count > 0)
                 {
@@ -255,9 +265,12 @@ namespace MothercareImportData
                 texts = ExcelFileService.GetExcelData<ItemTextsRecord>(excelData, firstLineInUse);
                 if (texts.Count > 0)
                 {
-                    softoneService.SetItemTexts(texts, item_list);
+                    logs_remarks = logs_remarks + $"Εισαγωγή Κειμένων ({texts.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    var execlog = softoneService.SetItemTexts(texts, item_list);
+                    logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                 }
                 //tags
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Tags ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 excelData = excelClient.ExportExcelData("tags");
                 if (excelData.Count > 0)
                 {
@@ -266,7 +279,10 @@ namespace MothercareImportData
                 tags = ExcelFileService.GetExcelData<TagRecord>(excelData, firstLineInUse);
                 if (tags.Count > 0)
                 {
-                    softoneService.CreateTag(tags, item_list);
+                    var softonetags_list = softoneService.GetSqlTags();
+                    logs_remarks = logs_remarks + $"Εισαγωγή Tags ({tags.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    var execlog = softoneService.CreateTag(tags, item_list, softonetags_list);
+                    logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                 }
                 //nid
                 excelData = excelClient.ExportExcelData("nid");
@@ -274,9 +290,10 @@ namespace MothercareImportData
                 {
                     excelData.RemoveRange(0, numLinesToRemove);
                 }
-                var nids = ExcelFileService.GetExcelData<NidRecord>(excelData, firstLineInUse);
+                nids = ExcelFileService.GetExcelData<NidRecord>(excelData, firstLineInUse);
                 if (nids.Count > 0)
                 {
+                    logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου NIds ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                     //GetNids
                     var softOneNids = softoneService.GetNids();
                     var result = new List<NidRecord>();
@@ -299,8 +316,22 @@ namespace MothercareImportData
                     }
                     if (result.Count > 0)
                     {
-                        softoneService.SetNid(result, item_list);
+                        logs_remarks = logs_remarks + $"Εισαγωγή NIds ({result.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.SetNid(result, item_list);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                     }
+                }
+                if (logs_remarks != "")
+                {
+                    logs_remarks = logs_remarks + $"Ολοκλήρωση Διαδικασίας ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    impparams.Current["COMMENTS"] = logs_remarks;
+                    XModule.OpenSubForm("SFErrorData", 1);
+                    //1: Opens the sub form and fires the event “Before show form” 
+                    //-1: Closes the sub form and fires the “Accept” event 
+                    //-2: Closes the sub form and fires the “Cancel” event
+                    var querylog = $@"INSERT INTO CCCMCLOGS (COMPANY,JOB,PATH,REMARKS,COMPUTERNAME,INSUSER,INSDATE)
+                                      VALUES ({XSupport.ConnectionInfo.CompanyId},2,'{filePath}','{logs_remarks.Replace("'", "")}','{XSupport.ConnectionInfo.ComputerName}',{XSupport.ConnectionInfo.UserId},'{DateTime.Now:yyyyMMdd HH:mm:ss}');";
+                    XSupport.ExecuteSQL(querylog);
                 }
             }
             catch (Exception ex)

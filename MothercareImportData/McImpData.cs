@@ -119,39 +119,39 @@ namespace MothercareImportData
                 XSupport.Exception(ex.Message);
             }
         }
-        public void MarkStage(int number)
-        {
-            var results = XModule.GetTable("RESULTS");
-            //results.Current.Edit(0);
-            results.Current["STAGE"] = number;
-            results.Resync();
-            XModule.Exec("CODE:ModuleIntf.SENDRESPONSE", XModule.Handle, 0, results.TablePtr);
-            results.Current["STAGE"] = 4; //Χρειάζεται ένα στάδιο που δεν υπάρχει για να μην ξαναγράφει
-        }
-        public void ProgressNotify(int prmode, int prvalue)
-        {
-            var results = XModule.GetTable("RESULTS");
-            //results.Current.Edit(0);
-            switch (prmode)
-            {
-                case 0:
-                    results.Current["STARTSTOP"] = prvalue;
-                    break;
-                case 1:
-                    results.Current["STARTSTOP"] = prvalue;
-                    break;
-                case 2:
-                    results.Current["TOTREC"] = prvalue;
-                    break;
-                case 3:
-                    results.Current["CURREC"] = prvalue;
-                    break;
-            }
-            results.Resync();
-            XModule.Exec("CODE:ModuleIntf.SENDRESPONSE", XModule.Handle, 0, results.TablePtr);
-            //X.EXEC('CODE:ModuleIntf.SENDRESPONSE', X.MODULE, 0, RESULTS);
-            results.Current["STAGE"] = 4;
-        }
+        //public void MarkStage(int number)
+        //{
+        //    var results = XModule.GetTable("RESULTS");
+        //    //results.Current.Edit(0);
+        //    results.Current["STAGE"] = number;
+        //    results.Resync();
+        //    XModule.Exec("CODE:ModuleIntf.SENDRESPONSE", XModule.Handle, 0, results.TablePtr);
+        //    results.Current["STAGE"] = 4; //Χρειάζεται ένα στάδιο που δεν υπάρχει για να μην ξαναγράφει
+        //}
+        //public void ProgressNotify(int prmode, int prvalue)
+        //{
+        //    var results = XModule.GetTable("RESULTS");
+        //    //results.Current.Edit(0);
+        //    switch (prmode)
+        //    {
+        //        case 0:
+        //            results.Current["STARTSTOP"] = prvalue;
+        //            break;
+        //        case 1:
+        //            results.Current["STARTSTOP"] = prvalue;
+        //            break;
+        //        case 2:
+        //            results.Current["TOTREC"] = prvalue;
+        //            break;
+        //        case 3:
+        //            results.Current["CURREC"] = prvalue;
+        //            break;
+        //    }
+        //    results.Resync();
+        //    XModule.Exec("CODE:ModuleIntf.SENDRESPONSE", XModule.Handle, 0, results.TablePtr);
+        //    //X.EXEC('CODE:ModuleIntf.SENDRESPONSE', X.MODULE, 0, RESULTS);
+        //    results.Current["STAGE"] = 4;
+        //}
         public override void BeforePost()
         {
             base.BeforePost();
@@ -183,316 +183,392 @@ namespace MothercareImportData
                 var excelData = new List<LiRow>();
                 var softoneService = new SoftoneService(XSupport,XModule);
 
-                switch (datatype)
+                //--------------------------------------------//
+                //Division
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Divisions ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("division");
+                if (excelData.Count > 0)
                 {
-                    case 1:
-                        excelData = excelClient.ExportExcelData("Αρχείο Ειδών");
-                        if (excelData.Count > 0)
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                divisions = ExcelFileService.GetExcelData<DivisionRecord>(excelData, firstLineInUse);
+                if (divisions.Count > 0)
+                {
+                    var differences = divisions.Where(d => !division_list.Any(s => s.Code == d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Division ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog =softoneService.CreateDivision(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Department
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Departments ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("Department");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                departments = ExcelFileService.GetExcelData<DepartmentRecord>(excelData, firstLineInUse);
+                if (departments.Count > 0)
+                {
+                    var differences = departments.Where(d => !department_list.Any(s => s.Code == d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Department ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateDepartment(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Subdepartment
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Subdepartments ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("Subdepartment");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                subdepartments = ExcelFileService.GetExcelData<SubdepartmentRecord>(excelData, firstLineInUse);
+                if (subdepartments.Count > 0)
+                {
+                    var differences = subdepartments.Where(d => !subdepartment_list.Any(s => s.Code == d.DepartmentCode + "-" + d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Subdepartment ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateSubdepartment(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Class
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Class ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("Clas");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                classes = ExcelFileService.GetExcelData<ClassRecord>(excelData, firstLineInUse);
+                if (classes.Count > 0)
+                {
+                    var differences = classes.Where(d => !class_list.Any(s => s.Code == d.DepartmentCode + "-" + d.SubdeptCode + "-" + d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Class ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateClass(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Brand
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Brand ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("Brand");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                brands = ExcelFileService.GetExcelData<BrandRecord>(excelData, firstLineInUse);
+                if (brands.Count > 0)
+                {
+                    var differences = brands.Where(d => !brand_list.Any(s => s.Code == "MC" + d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Brand ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateBrand(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Συλλογή
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Συλλογή ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("Συλλογή"); // th 1268 prepein na thn aferesoume apo thn bash
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                collections = ExcelFileService.GetExcelData<CollectionRecord>(excelData, firstLineInUse);
+                if (collections.Count > 0)
+                {
+                    var differences = collections.Where(d => !collection_list.Any(s => s.Code == d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Συλλογή ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateCollection(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Εμπορική Συλλογή
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Εμπορική Συλλογή ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("Εμπορική Συλλογή");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                commercialCollections = ExcelFileService.GetExcelData<CommercialCollectionRecord>(excelData, firstLineInUse);
+                if (commercialCollections.Count > 0)
+                {
+                    var differences = commercialCollections.Where(d => !commercialcollection_list.Any(s => s.Code == d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Εμπορική Συλλογή ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateCommercialCollection(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //BU
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου BU ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("BU");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                businessUnits = ExcelFileService.GetExcelData<BuRecord>(excelData, firstLineInUse);
+                if (businessUnits.Count > 0)
+                {
+                    var differences = businessUnits.Where(d => !busunit_list.Any(s => s.Code == "MC" + d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή BU ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateBusinessUnit(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Τύπος Είδους
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Τύπος Είδους ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("τύπος είδους");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                itemTypes = ExcelFileService.GetExcelData<ItemTypeRecord>(excelData, firstLineInUse);
+                if (itemTypes.Count > 0)
+                {
+                    var differences = itemTypes.Where(d => !itemtype_list.Any(s => s.Code == "MC" + d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου Τύπος Είδους ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateItemType(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Τύπος για Λογιστική
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Τύπος για Λογιστική ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("τύπος για λογιστική");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                accountingTypes = ExcelFileService.GetExcelData<AccountingTypeRecord>(excelData, firstLineInUse);
+                if (accountingTypes.Count > 0)
+                {
+                    var differences = accountingTypes.Where(d => !accountingtype_list.Any(s => s.Code == "MC" + d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Τύπος για Λογιστική ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateAccountingType(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Μεγεθολόγιο
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Μεγεθολόγιο ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("μεγεθολόγιο");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                sizeGuides = ExcelFileService.GetExcelData<SizeGuideRecord>(excelData, firstLineInUse);
+                if (sizeGuides.Count > 0)
+                {
+                    var differences = sizeGuides.Where(d => !sizeguide_list.Any(s => s.Code == d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Μεγεθολόγιο ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateSizeGuide(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Μεγέθη
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Μεγέθη ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("μεγέθη");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                sizes = ExcelFileService.GetExcelData<SizeRecord>(excelData, firstLineInUse);
+                if (sizes.Count > 0)
+                {
+                    var differences = sizes.Where(d => !size_list.Any(s => s.Code == d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Μεγέθη ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateSize(differences, sizeguide_list);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                    var similarities = sizes.Where(d => size_list.Any(s => s.Code == d.Code)).ToList();
+                    if(similarities.Count>0)
+                    {
+                        logs_remarks = logs_remarks + $"Ενημέρωση Μεγέθη ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.UpdateSizeAttributes(sizes,size_list,sizeguide_list);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Εποχικότητα
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Εποχικότητα ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("Εποχικότητα");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                seasonalities = ExcelFileService.GetExcelData<SeasonalityRecord>(excelData, firstLineInUse);
+                if (seasonalities.Count > 0)
+                {
+                    var differences = seasonalities.Where(d => !seasonality_list.Any(s => s.Code == d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Εποχικότητα ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateSeasonality(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Οίκος
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Οίκος ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("Οίκος");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                houses = ExcelFileService.GetExcelData<HouseRecord>(excelData, firstLineInUse);
+                if (houses.Count > 0)
+                {
+                    var differences = houses.Where(d => !house_list.Any(s => s.Code == d.Code && d.Code != "")).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Οίκος ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.CreateHouse(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //Αρχείο Ειδών
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Ειδών ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("Αρχείο Ειδών");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
+                items = items.Where(x => x.ItemType == 1).ToList();//ΕΜΠΟΡΕΥΜΑ
+                if (items.Count > 0)
+                {
+                    var newdata = false;
+                    // Πρεπει να δημιουργούνται τα Intrastat, Size, Color, House, Vat, Supplier, Themes πριν τα Items
+                    var intrastats = items.Select(i => i.Intrastat).Distinct().ToList();
+                    if (intrastats.Count > 0)
+                    {
+                        var differences = intrastats.Where(d => !intrastat_list.Any(s => s.Code == d.Substring(0, (d.Length > 8 ? 8 : d.Length)))).ToList().Where(y=>y !="").ToList();
+                        if (differences.Count > 0)
                         {
-                            excelData.RemoveRange(0, numLinesToRemove);
+                            newdata = true;
+                            logs_remarks = logs_remarks + $"Δημιουργία Intrastat ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                            var execlogint =  softoneService.CreateIntrastat(differences);
+                            logs_remarks = logs_remarks + execlogint + System.Environment.NewLine;
                         }
-                        items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
-                        items = items.Where(x => x.ItemType == 1).ToList();//ΕΜΠΟΡΕΥΜΑ
-                        if (items.Count > 0)
+                    }
+                    var themes = items.Select(i => i.StyleNo).Distinct().ToList();
+                    if (themes.Count > 0)
+                    {
+                        var differences = themes.Where(d => !theme_list.Any(s => s.Name == d )).ToList().Where(y => y != "").ToList();
+                        if (differences.Count > 0)
                         {
-                            var newdata = false;
-                            // Πρεπει να δημιουργούνται τα Intrastat, Size, Color, House, Vat, Supplier, Themes πριν τα Items
-                            var intrastats = items.Select(i => i.Intrastat).Distinct().ToList();
-                            if (intrastats.Count > 0)
-                            {
-                                var differences = intrastats.Where(d => !intrastat_list.Any(s => s.Code == d.Substring(0, (d.Length > 8 ? 8 : d.Length)))).ToList();
-                                if (differences.Count > 0)
-                                {
-                                    newdata = true;
-                                    softoneService.CreateIntrastat(differences);
-                                }
-                            }
-                            var themes = items.Select(i => i.StyleNo).Distinct().ToList();
-                            if (themes.Count > 0)
-                            {
-                                var differences = themes.Where(d => !theme_list.Any(s => s.Name == d)).ToList();
-                                if (differences.Count > 0)
-                                {
-                                    newdata = true;
-                                    softoneService.CreateTheme(differences);
-                                }
-                            }
-                            if (newdata)
-                            {
-                                sqlData = softoneService.GetSqlData();
-                            }
-                            softoneService.CreateUpdateItems(items, sqlData);
+                            newdata = true;
+                            logs_remarks = logs_remarks + $"Δημιουργία Θέματος ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                            var execlogth = softoneService.CreateTheme(differences);
+                            logs_remarks = logs_remarks + execlogth + System.Environment.NewLine;
                         }
-                        break;
-                    case 2:
-                        excelData = excelClient.ExportExcelData("barcode");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        barcodes = ExcelFileService.GetExcelData<BarcodeRecord>(excelData, firstLineInUse);
-                        if (barcodes.Count > 0)
-                        {
-                            var itemCodesSet = new HashSet<string>(item_list.Select(s => s.Code));
-                            var existingItemCodes = barcodes
-                                .Where(d => itemCodesSet.Contains(d.ItemCode))
-                                .ToList();
-                            //var test = existingItemCodes.Select(x => x.ItemCode).Distinct().ToList();
-                            if (existingItemCodes.Count > 0)
-                            {
-                                softoneService.ImportBarcode(existingItemCodes, item_list);
-                            }
-                        }
-                        break;
-                    case 3:
-                        excelData = excelClient.ExportExcelData("division");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        divisions = ExcelFileService.GetExcelData<DivisionRecord>(excelData, firstLineInUse);
-                        if (divisions.Count > 0)
-                        {
-                            var differences = divisions.Where(d => !division_list.Any(s => s.Code == d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateDivision(differences);
-                            }
-                        }
-                        break;
-                    case 4:
-                        excelData = excelClient.ExportExcelData("Department");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        departments = ExcelFileService.GetExcelData<DepartmentRecord>(excelData, firstLineInUse);
-                        if (departments.Count > 0)
-                        {
-                            var differences = departments.Where(d => !department_list.Any(s => s.Code == d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateDepartment(differences);
-                            }
-                        }
-                        break;
-                    case 5:
-                        excelData = excelClient.ExportExcelData("Subdepartment");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        subdepartments = ExcelFileService.GetExcelData<SubdepartmentRecord>(excelData, firstLineInUse);
-                        if (subdepartments.Count > 0)
-                        {
-                            var differences = subdepartments.Where(d => !subdepartment_list.Any(s => s.Code == d.DepartmentCode + "-" + d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateSubdepartment(differences);
-                            }
-                        }
-                        break;
-                    case 6:
-                        excelData = excelClient.ExportExcelData("Clas");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        classes = ExcelFileService.GetExcelData<ClassRecord>(excelData, firstLineInUse);
-                        if (classes.Count > 0)
-                        {
-                            var differences = classes.Where(d => !class_list.Any(s => s.Code == d.DepartmentCode + "-" + d.SubdeptCode + "-" + d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateClass(differences);
-                            }
-                        }
-                        break;
-                    case 7:
-                        excelData = excelClient.ExportExcelData("Brand");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        brands = ExcelFileService.GetExcelData<BrandRecord>(excelData, firstLineInUse);
-                        if (brands.Count > 0)
-                        {
-                            var differences = brands.Where(d => !brand_list.Any(s => s.Code == "MC" + d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateBrand(differences);
-                            }
-                        }
-                        break;
-                    case 8:
-                        excelData = excelClient.ExportExcelData("Συλλογή"); // th 1268 prepein na thn aferesoume apo thn bash
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        collections = ExcelFileService.GetExcelData<CollectionRecord>(excelData, firstLineInUse);
-                        if (collections.Count > 0)
-                        {
-                            var differences = collections.Where(d => !collection_list.Any(s => s.Code == d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateCollection(differences);
-                            }
-                        }
-                        break;
-                    case 9:
-                        excelData = excelClient.ExportExcelData("Εμπορική Συλλογή");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        commercialCollections = ExcelFileService.GetExcelData<CommercialCollectionRecord>(excelData, firstLineInUse);
-                        if (commercialCollections.Count > 0)
-                        {
-                            var differences = commercialCollections.Where(d => !commercialcollection_list.Any(s => s.Code == d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateCommercialCollection(differences);
-                            }
-                        }
-                        break;
-                    case 10:
-                        excelData = excelClient.ExportExcelData("BU");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        businessUnits = ExcelFileService.GetExcelData<BuRecord>(excelData, firstLineInUse);
-                        if (businessUnits.Count > 0)
-                        {
-                            var differences = businessUnits.Where(d => !busunit_list.Any(s => s.Code == "MC" + d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateBusinessUnit(differences);
-                            }
-                        }
-                        break;
-                    case 11:
-                        excelData = excelClient.ExportExcelData("τύπος είδους");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        itemTypes = ExcelFileService.GetExcelData<ItemTypeRecord>(excelData, firstLineInUse);
-                        if (itemTypes.Count > 0)
-                        {
-                            var differences = itemTypes.Where(d => !itemtype_list.Any(s => s.Code == "MC" + d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateItemType(differences);
-                            }
-                        }
-                        break;
-                    case 13:
-                        excelData = excelClient.ExportExcelData("τύπος για λογιστική");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        accountingTypes = ExcelFileService.GetExcelData<AccountingTypeRecord>(excelData, firstLineInUse);
-                        if (accountingTypes.Count > 0)
-                        {
-                            var differences = accountingTypes.Where(d => !accountingtype_list.Any(s => s.Code == "MC" + d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateAccountingType(differences);
-                            }
-                        }
-                        break;
-                    case 14:
-                        excelData = excelClient.ExportExcelData("όμοια είδη");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        similarItems = ExcelFileService.GetExcelData<SimilarItemRecord>(excelData, firstLineInUse);
-                        if (similarItems.Count > 0)
-                        {
-                            softoneService.SetSimilarItems(similarItems, item_list);
-                        }
-                        break;
-                    case 15:
-                        excelData = excelClient.ExportExcelData("μεγέθη");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        sizes = ExcelFileService.GetExcelData<SizeRecord>(excelData, firstLineInUse);
-                        if (sizes.Count > 0)
-                        {
-                            var differences = sizes.Where(d => !size_list.Any(s => s.Code == d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateSize(differences, sizeguide_list);
-                            }
-                        }
-                        break;
-                    case 18:
-                        excelData = excelClient.ExportExcelData("μεγεθολόγιο");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        sizeGuides = ExcelFileService.GetExcelData<SizeGuideRecord>(excelData, firstLineInUse);
-                        if (sizeGuides.Count > 0)
-                        {
-                            var differences = sizeGuides.Where(d => !sizeguide_list.Any(s => s.Code == d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateSizeGuide(differences);
-                            }
-                        }
-                        break;
-                    case 19:
-                        excelData = excelClient.ExportExcelData("Εποχικότητα");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        seasonalities = ExcelFileService.GetExcelData<SeasonalityRecord>(excelData, firstLineInUse);
-                        if (seasonalities.Count > 0)
-                        {
-                            var differences = seasonalities.Where(d => !seasonality_list.Any(s => s.Code == d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateSeasonality(differences);
-                            }
-                        }
-                        break;
-                    case 20:
-                        excelData = excelClient.ExportExcelData("Οίκος");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        houses = ExcelFileService.GetExcelData<HouseRecord>(excelData, firstLineInUse);
-                        if (houses.Count > 0)
-                        {
-                            var differences = houses.Where(d => !house_list.Any(s => s.Code == d.Code)).ToList();
-                            if (differences.Count > 0)
-                            {
-                                softoneService.CreateHouse(differences);
-                            }
-                        }
-                        break;
-                    case 21:
-                        excelData = excelClient.ExportExcelData("barcode προμηθευτών");
-                        if (excelData.Count > 0)
-                        {
-                            excelData.RemoveRange(0, numLinesToRemove);
-                        }
-                        supbarcodes = ExcelFileService.GetExcelData<SupBarcodeRecord>(excelData, firstLineInUse);
-                        if (supbarcodes.Count > 0)
-                        {
-                            softoneService.UpdateSupBarcodes(supbarcodes);
-                        }
-                        break;
-                }          
+                    }
+                    if (newdata)
+                    {
+                        sqlData = softoneService.GetSqlData();
+                    }
+                    logs_remarks = logs_remarks + $"Εισαγωγή - Ενημέρωση Ειδών ({items.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    var execlog = softoneService.CreateUpdateItems(items, sqlData);
+                    logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                }
+
+                sqlData = softoneService.GetSqlData();
+                item_list = sqlData.Where(x => x.Obj == "item").ToList();
+
+                //Barcode Προμηθευτών
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Barcode Προμηθευτών ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("barcode προμηθευτών");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                supbarcodes = ExcelFileService.GetExcelData<SupBarcodeRecord>(excelData, firstLineInUse);
+                if (supbarcodes.Count > 0)
+                {
+                    logs_remarks = logs_remarks + $"Εισαγωγή Barcode Προμηθευτών ({supbarcodes.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    var execlog = softoneService.UpdateSupBarcodes(supbarcodes);
+                    logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                }
+                //Όμοια Είδη
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Όμοια Είδη ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("όμοια είδη");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                similarItems = ExcelFileService.GetExcelData<SimilarItemRecord>(excelData, firstLineInUse);
+                if (similarItems.Count > 0)
+                {
+                    var softoneSimilarItems = softoneService.GetSqlSimilarItems();
+                    var differences = similarItems.Where(d => !softoneSimilarItems.Any(s => s.ItemCode == d.ItemCode && s.ReferenceItemCode == d.ReferenceItemCode)).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου Όμοια Είδη ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.SetSimilarItems(differences, item_list);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                    //logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου Όμοια Είδη ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    //var execlog = softoneService.SetSimilarItems(similarItems, item_list);
+                    //logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                }
+                //Barcode
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου barcode ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("barcode");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                barcodes = ExcelFileService.GetExcelData<BarcodeRecord>(excelData, firstLineInUse);
+                if (barcodes.Count > 0)
+                {
+                    var softonebarcodes = softoneService.GetSqlBarcodes();
+                    var differences = barcodes.Where(d => !softonebarcodes.Any(s => s.Barcode == d.Barcode && s.ItemCode == d.ItemCode)).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου barcode ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.ImportBarcode(differences, item_list);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                    //var itemCodesSet = new HashSet<string>(item_list.Select(s => s.Code));
+                    //var existingItemCodes = barcodes
+                    //    .Where(d => itemCodesSet.Contains(d.ItemCode))
+                    //    .ToList();
+                    //if (existingItemCodes.Count > 0)
+                    //{
+                    //    logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου barcode ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    //    var execlog = softoneService.ImportBarcode(existingItemCodes, item_list);
+                    //    logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    //}
+                }
+                if (logs_remarks != "")
+                {
+                    logs_remarks = logs_remarks + $"Ολοκλήρωση Διαδικασίας ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    impparams.Current["COMMENTS"] = logs_remarks;
+                    XModule.OpenSubForm("SFErrorData", 1);
+                    //1: Opens the sub form and fires the event “Before show form” 
+                    //-1: Closes the sub form and fires the “Accept” event 
+                    //-2: Closes the sub form and fires the “Cancel” event
+                    var querylog = $@"INSERT INTO CCCMCLOGS (COMPANY,JOB,PATH,REMARKS,COMPUTERNAME,INSUSER,INSDATE)
+                                      VALUES ({XSupport.ConnectionInfo.CompanyId},1,'{filePath}','{logs_remarks.Replace("'", "")}','{XSupport.ConnectionInfo.ComputerName}',{XSupport.ConnectionInfo.UserId},'{DateTime.Now:yyyyMMdd HH:mm:ss}');";
+                    XSupport.ExecuteSQL(querylog);
+                }
             }
             catch (Exception ex)
             {
