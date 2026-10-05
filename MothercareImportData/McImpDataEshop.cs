@@ -105,7 +105,7 @@ namespace MothercareImportData
                 excelAttributes = ExcelFileService.GetExcelData<AttributeRecord>(excelData, firstLineInUse);
                 if (excelAttributes.Count > 0)
                 {
-                    var softOneAttributes = softoneService.GetSqlAttributeData2(); //softoneService.GetSqlAttributeData();
+                    var softOneAttributes = softoneService.GetSqlAttributeData(); //softoneService.GetSqlAttributeData();
                     var result = new List<AttributeRecord>();
                     foreach (var excelAttribute in excelAttributes)
                     {
@@ -206,25 +206,52 @@ namespace MothercareImportData
                 excelProductAttributes = ExcelFileService.GetExcelData<ProductAttributeRecord>(excelData, firstLineInUse);
                 if (excelProductAttributes.Count > 0)
                 {
-                    var softOneAttributes = softoneService.GetSqlAttributeData2();
+                    var softOneAttributes = softoneService.GetSqlAttributeData();
                     var softOneProductAttributes = softoneService.GetSqlProductAttributeData();
                     var result = new List<ProductAttributeRecord>();
+                    //foreach (var excel in excelProductAttributes)
+                    //{
+                    //    var softOne = softOneProductAttributes.FirstOrDefault(x =>
+                    //        string.Equals(x.ProductCode, excel.ProductCode, StringComparison.OrdinalIgnoreCase) &&
+                    //        string.Equals(x.AttributeCode, excel.AttributeCode, StringComparison.OrdinalIgnoreCase) &&
+                    //        string.Equals(x.AttributeValueCode, excel.AttributeValueCode, StringComparison.OrdinalIgnoreCase) &&
+                    //        x.LanguageCode == excel.LanguageCode
+                    //    );
+                    //    // Δεν υπάρχει καθόλου στη βάση
+                    //    if (softOne == null)
+                    //    {
+                    //        result.Add(excel);
+                    //        continue;
+                    //    }
+                    //    // Υπάρχει αλλά έχει διαφορετική περιγραφή
+                    //    if (!string.Equals(
+                    //            softOne.FreeText?.Trim(),
+                    //            excel.FreeText?.Trim(),
+                    //            StringComparison.Ordinal))
+                    //    {
+                    //        result.Add(excel);
+                    //    }
+                    //}
+                    var softOneLookup = softOneProductAttributes.ToLookup(x => string.Concat(
+                        x.ProductCode?.Trim().ToUpperInvariant(), "|",
+                        x.AttributeCode?.Trim().ToUpperInvariant(), "|",
+                        x.AttributeValueCode?.Trim().ToUpperInvariant(), "|",
+                        x.LanguageCode));
                     foreach (var excel in excelProductAttributes)
                     {
-                        var softOne = softOneProductAttributes.FirstOrDefault(x =>
-                            string.Equals(x.ProductCode, excel.ProductCode, StringComparison.OrdinalIgnoreCase) &&
-                            string.Equals(x.AttributeCode, excel.AttributeCode, StringComparison.OrdinalIgnoreCase) &&
-                            string.Equals(x.AttributeValueCode, excel.AttributeValueCode, StringComparison.OrdinalIgnoreCase) &&
-                            x.LanguageCode == excel.LanguageCode
+                        var key = string.Concat(
+                            excel.ProductCode?.Trim().ToUpperInvariant(), "|",
+                            excel.AttributeCode?.Trim().ToUpperInvariant(), "|",
+                            (excel.AttributeValueCode == null ? "" : excel.AttributeValueCode)?.Trim().ToUpperInvariant(), "|",
+                            excel.LanguageCode
                         );
-
-                        // Δεν υπάρχει καθόλου στη βάση
+                        var softOne = softOneLookup[key].FirstOrDefault();
+                        // Δεν υπάρχει στη βάση
                         if (softOne == null)
                         {
                             result.Add(excel);
                             continue;
                         }
-
                         // Υπάρχει αλλά έχει διαφορετική περιγραφή
                         if (!string.Equals(
                                 softOne.FreeText?.Trim(),
@@ -237,7 +264,8 @@ namespace MothercareImportData
                     if (result.Count > 0)
                     {
                         logs_remarks = logs_remarks + $"Εισαγωγή Attributes Per Product ({result.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
-                        var execlog = softoneService.CreateUpdateProductAttributes(result, sqlData, softOneAttributes);
+                        var execlog = softoneService.CreateUpdateProductAttributesNew(result, sqlData, softOneAttributes);
+                            //softoneService.CreateUpdateProductAttributes(result, sqlData, softOneAttributes);
                         logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                     }
                 }
@@ -251,9 +279,14 @@ namespace MothercareImportData
                 addOns = ExcelFileService.GetExcelData<AddOnRecord>(excelData, firstLineInUse);
                 if (addOns.Count > 0)
                 {
-                    logs_remarks = logs_remarks + $"Εισαγωγή Add Ons ({addOns.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
-                    var execlog = softoneService.SetAddOns(addOns, item_list);
-                    logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    var softOneAddOns = softoneService.GetSqlAddOns();
+                    var differences = addOns.Where(d => !softOneAddOns.Any(s => s.ItemCode.Trim() == d.ItemCode.Trim() && s.AddOnItemCode.Trim() == d.AddOnItemCode.Trim())).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Add Ons ({addOns.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.SetAddOns(differences, item_list);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
                 }
                 //κείμενα
                 logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Κειμένων ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
@@ -265,9 +298,54 @@ namespace MothercareImportData
                 texts = ExcelFileService.GetExcelData<ItemTextsRecord>(excelData, firstLineInUse);
                 if (texts.Count > 0)
                 {
-                    logs_remarks = logs_remarks + $"Εισαγωγή Κειμένων ({texts.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
-                    var execlog = softoneService.SetItemTexts(texts, item_list);
-                    logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    var softonetexts = softoneService.GetSqlTexts();
+                    var differences = new List<ItemTextsRecord>();
+                    foreach (var excelItem in texts)
+                    {
+                        var sqlItem = softonetexts.FirstOrDefault(x => string.Equals(x.ItemCode?.Trim(), excelItem.ItemCode?.Trim(), StringComparison.OrdinalIgnoreCase));
+                        // Δεν υπάρχει καθόλου το προϊόν στη βάση
+                        if (sqlItem == null)
+                        {
+                            differences.Add(excelItem);
+                            continue;
+                        }
+                        var differentTranslations = new List<TextsTranslation>();
+                        foreach (var excelTranslation in excelItem.Texts)
+                        {
+                            var sqlTranslation = sqlItem.Texts.FirstOrDefault(x => x.LanguageCode == excelTranslation.LanguageCode);
+                            // Δεν υπάρχει η συγκεκριμένη γλώσσα
+                            if (sqlTranslation == null)
+                            {
+                                differentTranslations.Add(excelTranslation);
+                                continue;
+                            }
+                            // Υπάρχει αλλά έχει διαφορετικά δεδομένα
+                            if (!string.Equals(sqlTranslation.LabelTitle?.Trim(),excelTranslation.LabelTitle?.Trim(),StringComparison.Ordinal) ||
+                                !string.Equals(sqlTranslation.LabelDescription?.Trim(),excelTranslation.LabelDescription?.Trim(),StringComparison.Ordinal) ||
+                                !string.Equals(sqlTranslation.EshopTitle?.Trim(),excelTranslation.EshopTitle?.Trim(),StringComparison.Ordinal) ||
+                                !string.Equals(sqlTranslation.SmallDescription?.Trim(),excelTranslation.SmallDescription?.Trim(),StringComparison.Ordinal) ||
+                                !string.Equals(sqlTranslation.FeaturesAndBenefits?.Trim(),excelTranslation.FeaturesAndBenefits?.Trim(),StringComparison.Ordinal) ||
+                                !string.Equals(sqlTranslation.LongDescription?.Trim(),(excelTranslation.LongDescription == null?"": excelTranslation.LongDescription)?.Trim(),StringComparison.Ordinal))
+                            {
+                                differentTranslations.Add(excelTranslation);
+                            }
+                        }
+                        // Προσθέτουμε το προϊόν μόνο εάν έχει κάποια διαφορά
+                        if (differentTranslations.Count > 0)
+                        {
+                            differences.Add(new ItemTextsRecord
+                            {
+                                ItemCode = excelItem.ItemCode,
+                                Texts = differentTranslations
+                            });
+                        }
+                    }
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Κειμένων ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.SetItemTextsNew(differences, item_list);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
                 }
                 //tags
                 logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Tags ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
@@ -317,7 +395,7 @@ namespace MothercareImportData
                     if (result.Count > 0)
                     {
                         logs_remarks = logs_remarks + $"Εισαγωγή NIds ({result.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
-                        var execlog = softoneService.SetNid(result, item_list);
+                        var execlog = softoneService.SetNidNew(result, item_list);
                         logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                     }
                 }

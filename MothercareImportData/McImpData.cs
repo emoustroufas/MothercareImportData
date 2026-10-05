@@ -451,7 +451,7 @@ namespace MothercareImportData
                     excelData.RemoveRange(0, numLinesToRemove);
                 }
                 items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
-                items = items.Where(x => x.ItemType == 1).ToList();//ΕΜΠΟΡΕΥΜΑ
+                //items = items.Where(x => x.ItemType == 1).ToList();//ΕΜΠΟΡΕΥΜΑ
                 if (items.Count > 0)
                 {
                     var newdata = false;
@@ -517,7 +517,7 @@ namespace MothercareImportData
                 if (similarItems.Count > 0)
                 {
                     var softoneSimilarItems = softoneService.GetSqlSimilarItems();
-                    var differences = similarItems.Where(d => !softoneSimilarItems.Any(s => s.ItemCode == d.ItemCode && s.ReferenceItemCode == d.ReferenceItemCode)).ToList();
+                    var differences = similarItems.Where(d => !softoneSimilarItems.Any(s => s.ItemCode.Trim() == d.ItemCode.Trim() && s.ReferenceItemCode.Trim() == d.ReferenceItemCode.Trim())).ToList();
                     if (differences.Count > 0)
                     {
                         logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου Όμοια Είδη ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
@@ -539,7 +539,7 @@ namespace MothercareImportData
                 if (barcodes.Count > 0)
                 {
                     var softonebarcodes = softoneService.GetSqlBarcodes();
-                    var differences = barcodes.Where(d => !softonebarcodes.Any(s => s.Barcode == d.Barcode && s.ItemCode == d.ItemCode)).ToList();
+                    var differences = barcodes.Where(d => !softonebarcodes.Any(s => s.Barcode.Trim() == d.Barcode.Trim() && s.ItemCode.Trim() == d.ItemCode.Trim())).ToList();
                     if (differences.Count > 0)
                     {
                         logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου barcode ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;

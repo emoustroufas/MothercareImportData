@@ -81,7 +81,7 @@ namespace MothercareImportData.Services
                             UNION ALL SELECT 'itemtype' AS OBJ, MTRCATEGORY AS ID, CODE, NAME, NULL AS FLG1 FROM MTRCATEGORY WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}  AND SODTYPE = 51
                             UNION ALL SELECT 'accountingtype' AS OBJ, MTRACN AS ID, CODE, NAME, NULL AS FLG1 FROM MTRACN WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}  AND SODTYPE = 51
                             UNION ALL SELECT 'country' AS OBJ, COUNTRY AS ID, SHORTCUT AS CODE, NAME, NULL AS FLG1 FROM COUNTRY WHERE ISACTIVE = 1 
-                            UNION ALL SELECT 'item' AS OBJ, MTRL AS ID, CODE, NAME, NULL AS FLG1 FROM MTRL WHERE COMPANY = {_xSupport.ConnectionInfo.CompanyId}  AND SODTYPE = 51 AND ISNULL(CCCITEMCOMPANY,0) IN (0,2)
+                            UNION ALL SELECT 'item' AS OBJ, MTRL AS ID, ISNULL(CCCMCOLDCODE,CODE) AS CODE, NAME, NULL AS FLG1 FROM MTRL WHERE COMPANY = {_xSupport.ConnectionInfo.CompanyId}  AND SODTYPE = 51 AND ISNULL(CCCITEMCOMPANY,0) IN (0,2)
                             UNION ALL SELECT 'supplier' AS OBJ, TRDR AS ID, CODE, NAME, NULL AS FLG1 FROM TRDR WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId} AND SODTYPE=12
                             UNION ALL SELECT 'sizeguide' AS OBJ, CCCSIZEGUIDE AS ID, CODE, NAME, NULL AS FLG1 FROM CCCSIZEGUIDE WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}
                             UNION ALL SELECT 'seasonality' AS OBJ, CCCSEASONALITY AS ID, CODE, NAME, NULL AS FLG1 FROM CCCSEASONALITY WHERE ISACTIVE = 1 AND COMPANY = {_xSupport.ConnectionInfo.CompanyId}
@@ -119,7 +119,7 @@ namespace MothercareImportData.Services
         public List<BarcodeRecord> GetSqlBarcodes()
         {
             var barcodes = new List<BarcodeRecord>();
-            var query = $@"SELECT MS.CODE AS BARCODE,M.CODE FROM MTRL M INNER JOIN MTRSUBSTITUTE MS ON MS.MTRL=M.MTRL WHERE M.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND M.SODTYPE=51 AND M.CCCITEMCOMPANY IN (0,2)";
+            var query = $@"SELECT MS.CODE AS BARCODE,ISNULL(M.CCCMCOLDCODE,M.CODE) AS CODE FROM MTRL M INNER JOIN MTRSUBSTITUTE MS ON MS.MTRL=M.MTRL WHERE M.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND M.SODTYPE=51 AND M.CCCITEMCOMPANY IN (0,2)";
             using (var ds = _xSupport.GetSQLDataSet(query, null))
             {
                 try
@@ -148,7 +148,7 @@ namespace MothercareImportData.Services
         public List<SimilarItemRecord> GetSqlSimilarItems()
         { 
             var similaritems = new List<SimilarItemRecord>();
-            var query = $@"SELECT M1.CODE AS ITEMCODE,M2.CODE AS REFERENCEITEMCODE FROM CCCSIMILARITEMS S
+            var query = $@"SELECT ISNULL(M1.CCCMCOLDCODE,M1.CODE) AS ITEMCODE,ISNULL(M2.CCCMCOLDCODE,M2.CODE) AS REFERENCEITEMCODE FROM CCCSIMILARITEMS S
                             LEFT JOIN MTRL M1 ON M1.MTRL =S.MTRL LEFT JOIN MTRL M2 ON M2.MTRL = S.SIMMTRL
                             WHERE S.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND M2.CODE IS NOT NULL AND M1.CODE IS NOT NULL";
             using (var ds = _xSupport.GetSQLDataSet(query, null))
@@ -879,7 +879,8 @@ namespace MothercareImportData.Services
                             if (mtrl == 0)
                             {
                                 ItemObj.InsertData();
-                                ItemObj.GetTable("MTRL").Current["CODE"] = item.Code;
+                                ItemObj.GetTable("MTRL").Current["CODE"] = "MC"+item.Code;
+                                ItemObj.GetTable("MTRL").Current["CCCMCOLDCODE"] = item.Code;
                                 ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] = 2; //0=Όλοι, 1=Dpam, 2=Mothercare
                             }
                             else
@@ -1178,28 +1179,49 @@ namespace MothercareImportData.Services
 
                         if (mtrl > 0 && similarCodes.Count > 0)
                         {
-                            using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                            var queryMaxId = $@"SELECT ISNULL(MAX(LINENUM),0) AS MAXID FROM CCCSIMILARITEMS WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND MTRL={mtrl}";
+                            var dsMaxId = _xSupport.SQL(queryMaxId, null);
+                            var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
+                            foreach (var code in similarCodes)
                             {
-                                ItemObj.LocateData(mtrl);
-                                //Πίνακας CCCSIMILARITEMS
-                                using (var mtrsimilar = ItemObj.GetTable("CCCSIMILARITEMS"))
+                                //05/10/2026
+                                var similarItem_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
+                                var similarItem = similarItem_list != null ? similarItem_list.Id : 0;
+                                if (similarItem == 0)
                                 {
-                                    foreach (var code in similarCodes)
-                                    {
-                                        var similarItem_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
-                                        var similarItem = similarItem_list != null ? similarItem_list.Id : 0;
-                                        var recNo1 = mtrsimilar.Find("SIMMTRL", similarItem);
-                                        if (recNo1 == -1)
-                                        {
-                                            mtrsimilar.Current.Append();
-                                            mtrsimilar.Current["SIMMTRL"] = similarItem;
-                                            mtrsimilar.Current["SIMILARITY"] = Convert.ToDouble(100);
-                                            mtrsimilar.Current.Post();
-                                        }
-                                    }
+                                    logs_remarks = logs_remarks + $"Δεν υπάρχει το όμοιο είδος «{similar.ItemCode}» για το είδος «{code}»." + Environment.NewLine;
+                                    continue;
                                 }
-                                ItemObj.PostData();
+                                else
+                                {
+                                    maxid += 1;
+                                    var updquery = $@"INSERT INTO CCCSIMILARITEMS (COMPANY,MTRL,LINENUM,SIMMTRL,SIMILARITY)
+                                                      VALUES ({_xSupport.ConnectionInfo.CompanyId},{mtrl},{maxid},{similarItem},{Convert.ToDouble(100)});";
+                                    _xSupport.ExecuteSQL(updquery);
+                                }
                             }
+                            //using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                            //{
+                            //    ItemObj.LocateData(mtrl);
+                            //    //Πίνακας CCCSIMILARITEMS
+                            //    using (var mtrsimilar = ItemObj.GetTable("CCCSIMILARITEMS"))
+                            //    {
+                            //        foreach (var code in similarCodes)
+                            //        {
+                            //            var similarItem_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
+                            //            var similarItem = similarItem_list != null ? similarItem_list.Id : 0;
+                            //            var recNo1 = mtrsimilar.Find("SIMMTRL", similarItem);
+                            //            if (recNo1 == -1)
+                            //            {
+                            //                mtrsimilar.Current.Append();
+                            //                mtrsimilar.Current["SIMMTRL"] = similarItem;
+                            //                mtrsimilar.Current["SIMILARITY"] = Convert.ToDouble(100);
+                            //                mtrsimilar.Current.Post();
+                            //            }
+                            //        }
+                            //    }
+                            //    ItemObj.PostData();
+                            //}
                         }
                         else
                         {
@@ -1244,35 +1266,53 @@ namespace MothercareImportData.Services
                     ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
                     try
                     {
-                        using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                        var mtrl_list = item_list.Where(x => x.Code.Trim() == barcode.ItemCode.Trim()).FirstOrDefault();
+                        var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
+                        var mname = mtrl_list != null ? mtrl_list.Name : "";
+                        if (mtrl > 0)
                         {
-                            var mtrl_list = item_list.Where(x => x.Code.Trim() == barcode.ItemCode.Trim()).FirstOrDefault();
-                            var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
-                            var mname = mtrl_list != null ? mtrl_list.Name : "";
-                            if (mtrl > 0)
-                            {
-                                ItemObj.LocateData(mtrl);
-                                //Πίνακας MTRSUBSTITUTE
-                                using (var mtrsubstitute = ItemObj.GetTable("MTRSUBSTITUTE"))
-                                {
-                                    var recNo1 = mtrsubstitute.Find("CODE", barcode.Barcode);
-                                    if (recNo1 == -1)
-                                    {
-                                        mtrsubstitute.Current.Append();
-                                        mtrsubstitute.Current["CODE"] = barcode.Barcode;
-                                        mtrsubstitute.Current["NAME"] = mname;
-                                        mtrsubstitute.Current["QTY1"] = Convert.ToDouble(1);
-                                        //mtrsubstitute.Current["QTY2"] = Convert.ToDouble(1);
-                                        mtrsubstitute.Current.Post();
-                                    }
-                                }
-                                ItemObj.PostData();
-                            }
-                            else
-                            {
-                                logs_remarks = logs_remarks + $"Δεν υπάρχει το είδος «{barcode.ItemCode}» με Barcode «{barcode.Barcode}»." + Environment.NewLine;
-                            }
+                            //05/10/2026
+                            var queryMaxId = $@"SELECT ISNULL(MAX(LINENUM),0) AS MAXID FROM MTRSUBSTITUTE WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND MTRL={mtrl}";
+                            var dsMaxId = _xSupport.SQL(queryMaxId, null);
+                            var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
+                            maxid += 1;
+                            var updquery = $@"INSERT INTO MTRSUBSTITUTE (COMPANY,MTRL,LINENUM,CODE,NAME,QTY1,QTY2,ISACTIVE,INSDATE)
+                                              VALUES ({_xSupport.ConnectionInfo.CompanyId},{mtrl},{maxid},'{barcode.Barcode}','{mname.Replace("'", "΄")}',1,1,1,GETDATE());";
+                            _xSupport.ExecuteSQL(updquery);
                         }
+                        else
+                        {
+                            logs_remarks = logs_remarks + $"Δεν υπάρχει το είδος «{barcode.ItemCode}» με Barcode «{barcode.Barcode}»." + Environment.NewLine;
+                        }
+                        //using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                        //{
+                        //    var mtrl_list = item_list.Where(x => x.Code.Trim() == barcode.ItemCode.Trim()).FirstOrDefault();
+                        //    var mtrl = mtrl_list != null ? mtrl_list.Id : 0;
+                        //    var mname = mtrl_list != null ? mtrl_list.Name : "";
+                        //    if (mtrl > 0)
+                        //    {
+                        //        ItemObj.LocateData(mtrl);
+                        //        //Πίνακας MTRSUBSTITUTE
+                        //        using (var mtrsubstitute = ItemObj.GetTable("MTRSUBSTITUTE"))
+                        //        {
+                        //            var recNo1 = mtrsubstitute.Find("CODE", barcode.Barcode);
+                        //            if (recNo1 == -1)
+                        //            {
+                        //                mtrsubstitute.Current.Append();
+                        //                mtrsubstitute.Current["CODE"] = barcode.Barcode;
+                        //                mtrsubstitute.Current["NAME"] = mname;
+                        //                mtrsubstitute.Current["QTY1"] = Convert.ToDouble(1);
+                        //                //mtrsubstitute.Current["QTY2"] = Convert.ToDouble(1);
+                        //                mtrsubstitute.Current.Post();
+                        //            }
+                        //        }
+                        //        ItemObj.PostData();
+                        //    }
+                        //    else
+                        //    {
+                        //        logs_remarks = logs_remarks + $"Δεν υπάρχει το είδος «{barcode.ItemCode}» με Barcode «{barcode.Barcode}»." + Environment.NewLine;
+                        //    }
+                        //}
                     }
                     catch (Exception ex)
                     {
@@ -1370,21 +1410,44 @@ namespace MothercareImportData.Services
             return logs_remarks;
         }
         //-----------------------------------------------------------------------------------------------------------------------------------//
+        //-----------------------------------------------------------------------------------------------------------------------------------//
         //-------------------------------------------------------------//Eshop//-------------------------------------------------------------//
+        //-----------------------------------------------------------------------------------------------------------------------------------//
         //-----------------------------------------------------------------------------------------------------------------------------------//
         public List<ProductAttributeRecord> GetSqlProductAttributeData()
         {
             var sqldata = new List<ProductAttributeRecord>();
             try
             {
-                var query = $@"SELECT M.MTRL,TH.CCCLANGUAGE AS CN_LANG_CD,M.CODE AS AP_EIDH_CD,TH.TRANSLATION,MA.CODE AS AP_ATTR0_CD,MAL.CODE AS AP_ATTR1_CD,FT.FREETXT AS FREE_TEXT
-                            FROM MTRL M
-                            LEFT JOIN MTRLATTRIBUTES MAS ON MAS.MTRL=M.MTRL
-                            LEFT JOIN CCCATTIBUTETRANSLATION TH ON TH.MTRATTRIBUTE=MAS.MTRATTRIBUTE AND TH.DATATYPE=1
-                            LEFT JOIN MTRATTRIBUTE MA ON MA.MTRATTRIBUTE=MAS.MTRATTRIBUTE
-                            LEFT JOIN MTRATTRIBUTELN MAL ON MAL.MTRATTRIBUTE =MAS.MTRATTRIBUTE AND MAL.MTRATTRIBUTELN=MAS.MTRATTRIBUTELN
-                            LEFT JOIN CCCATTRIBUTEFREETEXT FT ON FT.MTRATTRIBUTE = MAS.MTRATTRIBUTE AND FT.CCCLANGUAGE=TH.CCCLANGUAGE --AND FT.MTRATTRIBUTELN=MAL.MTRATTRIBUTELN
-                            WHERE M.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND TH.CCCLANGUAGE IS NOT NULL";
+                var query = $@"SELECT M.MTRL,
+                                TH.CCCLANGUAGE AS CN_LANG_CD,
+                                ISNULL(M.CCCMCOLDCODE,M.CODE) AS AP_EIDH_CD,
+                                TH.TRANSLATION,
+                                MA.CODE AS AP_ATTR0_CD,
+                                MAL.CODE AS AP_ATTR1_CD,
+                                ISNULL(FT.FREETXT,'') AS FREE_TEXT
+                                FROM MTRL M 
+                                LEFT JOIN MTRLATTRIBUTES MAS ON MAS.MTRL=M.MTRL
+                                LEFT JOIN CCCATTIBUTETRANSLATION TH ON TH.MTRATTRIBUTE=MAS.MTRATTRIBUTE AND TH.DATATYPE=1
+                                LEFT JOIN MTRATTRIBUTE MA ON MA.MTRATTRIBUTE=MAS.MTRATTRIBUTE
+                                LEFT JOIN MTRATTRIBUTELN MAL ON MAL.MTRATTRIBUTE =MAS.MTRATTRIBUTE AND MAL.MTRATTRIBUTELN=MAS.MTRATTRIBUTELN
+                                LEFT JOIN CCCATTRIBUTEFREETEXT FT ON FT.MTRATTRIBUTE = MAS.MTRATTRIBUTE AND FT.CCCLANGUAGE=TH.CCCLANGUAGE AND FT.MTRL=M.MTRL
+                                WHERE M.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND TH.CCCLANGUAGE IS NOT NULL
+                                GROUP BY M.MTRL,TH.CCCLANGUAGE,ISNULL(M.CCCMCOLDCODE,M.CODE),TH.TRANSLATION,MA.CODE,MAL.CODE,ISNULL(FT.FREETXT,'')
+                                ORDER BY M.MTRL,MA.CODE,TH.CCCLANGUAGE,MAL.CODE";
+                    //$@"SELECT M.MTRL,TH.CCCLANGUAGE AS CN_LANG_CD,
+                    //        ISNULL(M.CCCMCOLDCODE,M.CODE) AS AP_EIDH_CD,
+                    //        ISNULL(TH.TRANSLATION,'') AS TRANSLATION,
+                    //        ISNULL(MA.CODE,'') AS AP_ATTR0_CD,
+                    //        ISNULL(MAL.CODE,'') AS AP_ATTR1_CD,
+                    //        ISNULL(FT.FREETXT,'') AS FREE_TEXT
+                    //        FROM MTRL M
+                    //        LEFT JOIN MTRLATTRIBUTES MAS ON MAS.MTRL=M.MTRL
+                    //        LEFT JOIN CCCATTIBUTETRANSLATION TH ON TH.MTRATTRIBUTE=MAS.MTRATTRIBUTE AND TH.DATATYPE=1
+                    //        LEFT JOIN MTRATTRIBUTE MA ON MA.MTRATTRIBUTE=MAS.MTRATTRIBUTE
+                    //        LEFT JOIN MTRATTRIBUTELN MAL ON MAL.MTRATTRIBUTE =MAS.MTRATTRIBUTE AND MAL.MTRATTRIBUTELN=MAS.MTRATTRIBUTELN
+                    //        LEFT JOIN CCCATTRIBUTEFREETEXT FT ON FT.MTRATTRIBUTE = MAS.MTRATTRIBUTE AND FT.CCCLANGUAGE=TH.CCCLANGUAGE --AND FT.MTRATTRIBUTELN=MAL.MTRATTRIBUTELN
+                    //        WHERE M.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND TH.CCCLANGUAGE IS NOT NULL";
                 using (var ds = _xSupport.GetSQLDataSet(query, null))
                 {
                     try
@@ -1419,7 +1482,7 @@ namespace MothercareImportData.Services
                 throw new Exception(ex.Message);
             }
         }
-        public List<AttributeRecord> GetSqlAttributeData2()
+        public List<AttributeRecord> GetSqlAttributeData()
         {
             var sqldata = new List<AttributeRecord>();
             try
@@ -1509,136 +1572,136 @@ namespace MothercareImportData.Services
                 throw new Exception(ex.Message);
             }
         }
-        public List<AttributeRecord> GetSqlAttributeData()
-        {
-            var sqldata = new List<AttributeRecord>();
-            try
-            {
-                //Attributes
-                var attributelist = new List<AttributeRecord>();
-                var queryAttributes = $@"SELECT MTRATTRIBUTE,CODE,NAME FROM MTRATTRIBUTE WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISACTIVE=1";
-                using (var dsAttributes = _xSupport.GetSQLDataSet(queryAttributes, null))
-                {
-                    try
-                    {
-                        if (dsAttributes.Count > 0)
-                        {
-                            for (int i = 0; i < dsAttributes.Count; i++)
-                            {
-                                var mtrattributeId = dsAttributes.GetAsInteger(i, "MTRATTRIBUTE");
-                                //Attribute Translation
-                                var attributetranslationlist = new List<AttributeTranslation>();
-                                var queryAttributeTranslation = $@"SELECT MTRATTRIBUTE,CCCLANGUAGE,TRANSLATION FROM CCCATTIBUTETRANSLATION 
-                                                                    WHERE MTRATTRIBUTE={mtrattributeId} AND COMPANY={_xSupport.ConnectionInfo.CompanyId} 
-                                                                    AND ISNULL(CCCLANGUAGE,0)<>0 AND DATATYPE=1";
-                                using (var dsAttributeTranslation = _xSupport.GetSQLDataSet(queryAttributeTranslation, null))
-                                {
-                                    if (dsAttributeTranslation != null)
-                                    {
-                                        try
-                                        {
-                                            if (dsAttributeTranslation.Count > 0)
-                                            {
-                                                for (int j = 0; j < dsAttributeTranslation.Count; j++)
-                                                {
-                                                    var resAttributeTranslation = new AttributeTranslation
-                                                    {
-                                                        LanguageCode = dsAttributeTranslation.GetAsInteger(j, "CCCLANGUAGE"),
-                                                        Description = dsAttributeTranslation.GetAsString(j, "TRANSLATION")
-                                                    };
-                                                    attributetranslationlist.Add(resAttributeTranslation);
-                                                }
-                                            }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            throw new Exception(ex.Message);
-                                        }
-                                    }
-                                }
-                                //Attribute Values
-                                var attributevaluelist = new List<AttributeValue>();
-                                var queryAttributeValues = $@"SELECT MTRATTRIBUTE,MTRATTRIBUTELN,CODE,SOVALUE FROM MTRATTRIBUTELN 
-                                                              WHERE MTRATTRIBUTE={mtrattributeId} AND COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISACTIVE=1";
-                                using (var dsAttributeValues = _xSupport.GetSQLDataSet(queryAttributeValues, null))
-                                {
-                                    try
-                                    {
-                                        if (dsAttributeValues.Count > 0)
-                                        {
-                                            for (int v = 0; v < dsAttributeValues.Count; v++)
-                                            {
-                                                var mtrattributevalueId = dsAttributeValues.GetAsInteger(v, "MTRATTRIBUTELN");
-                                                //Attribute Value Translation
-                                                var attributevaluetranslationlist = new List<AttributeValueTranslation>();
-                                                var queryAttributeValueTranslation = $@"SELECT MTRATTRIBUTE,MTRATTRIBUTELN,CCCLANGUAGE,TRANSLATION FROM CCCATTIBUTETRANSLATION 
-                                                                                        WHERE MTRATTRIBUTE={mtrattributeId} AND MTRATTRIBUTELN={mtrattributevalueId} 
-                                                                                        AND COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISNULL(CCCLANGUAGE,0)<>0 AND DATATYPE=2";
-                                                using (var dsAttributeValueTranslation = _xSupport.GetSQLDataSet(queryAttributeValueTranslation, null))
-                                                {
-                                                    if (dsAttributeValueTranslation != null)
-                                                    {
-                                                        try
-                                                        {
-                                                            if (dsAttributeValueTranslation.Count > 0)
-                                                            {
-                                                                for (int t = 0; t < dsAttributeValueTranslation.Count; t++)
-                                                                {
-                                                                    var resAttributeValueTranslation = new AttributeValueTranslation
-                                                                    {
-                                                                        LanguageCode = dsAttributeValueTranslation.GetAsInteger(t, "CCCLANGUAGE"),
-                                                                        Description = dsAttributeValueTranslation.GetAsString(t, "TRANSLATION")
-                                                                    };
-                                                                    attributevaluetranslationlist.Add(resAttributeValueTranslation);
-                                                                }
-                                                            }
-                                                        }
-                                                        catch (Exception ex)
-                                                        {
-                                                            throw new Exception(ex.Message);
-                                                        }
-                                                    }
-                                                }
-                                                var resAttributeValues = new AttributeValue
-                                                {
-                                                    SoftOneId = dsAttributeValues.GetAsInteger(v, "MTRATTRIBUTELN"),
-                                                    Code = dsAttributeValues.GetAsString(v, "CODE"),
-                                                    Translations = attributevaluetranslationlist
-                                                };
-                                                attributevaluelist.Add(resAttributeValues);
-                                            }
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        throw new Exception(ex.Message);
-                                    }
-                                }
-                                var res = new AttributeRecord
-                                {
-                                    SoftOneId = dsAttributes.GetAsInteger(i, "MTRATTRIBUTE"),
-                                    Code = dsAttributes.GetAsString(i, "CODE"),
-                                    Translations = attributetranslationlist,
-                                    Values = attributevaluelist
-                                };
-                                attributelist.Add(res);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new Exception(ex.Message);
-                    }
-                }
-                sqldata = attributelist;
-                return sqldata;
-            }
-            catch (Exception ex)
-            {
-                return sqldata;
-                throw new Exception(ex.Message);
-            }
-        }
+        //public List<AttributeRecord> GetSqlAttributeData()
+        //{
+        //    var sqldata = new List<AttributeRecord>();
+        //    try
+        //    {
+        //        //Attributes
+        //        var attributelist = new List<AttributeRecord>();
+        //        var queryAttributes = $@"SELECT MTRATTRIBUTE,CODE,NAME FROM MTRATTRIBUTE WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISACTIVE=1";
+        //        using (var dsAttributes = _xSupport.GetSQLDataSet(queryAttributes, null))
+        //        {
+        //            try
+        //            {
+        //                if (dsAttributes.Count > 0)
+        //                {
+        //                    for (int i = 0; i < dsAttributes.Count; i++)
+        //                    {
+        //                        var mtrattributeId = dsAttributes.GetAsInteger(i, "MTRATTRIBUTE");
+        //                        //Attribute Translation
+        //                        var attributetranslationlist = new List<AttributeTranslation>();
+        //                        var queryAttributeTranslation = $@"SELECT MTRATTRIBUTE,CCCLANGUAGE,TRANSLATION FROM CCCATTIBUTETRANSLATION 
+        //                                                            WHERE MTRATTRIBUTE={mtrattributeId} AND COMPANY={_xSupport.ConnectionInfo.CompanyId} 
+        //                                                            AND ISNULL(CCCLANGUAGE,0)<>0 AND DATATYPE=1";
+        //                        using (var dsAttributeTranslation = _xSupport.GetSQLDataSet(queryAttributeTranslation, null))
+        //                        {
+        //                            if (dsAttributeTranslation != null)
+        //                            {
+        //                                try
+        //                                {
+        //                                    if (dsAttributeTranslation.Count > 0)
+        //                                    {
+        //                                        for (int j = 0; j < dsAttributeTranslation.Count; j++)
+        //                                        {
+        //                                            var resAttributeTranslation = new AttributeTranslation
+        //                                            {
+        //                                                LanguageCode = dsAttributeTranslation.GetAsInteger(j, "CCCLANGUAGE"),
+        //                                                Description = dsAttributeTranslation.GetAsString(j, "TRANSLATION")
+        //                                            };
+        //                                            attributetranslationlist.Add(resAttributeTranslation);
+        //                                        }
+        //                                    }
+        //                                }
+        //                                catch (Exception ex)
+        //                                {
+        //                                    throw new Exception(ex.Message);
+        //                                }
+        //                            }
+        //                        }
+        //                        //Attribute Values
+        //                        var attributevaluelist = new List<AttributeValue>();
+        //                        var queryAttributeValues = $@"SELECT MTRATTRIBUTE,MTRATTRIBUTELN,CODE,SOVALUE FROM MTRATTRIBUTELN 
+        //                                                      WHERE MTRATTRIBUTE={mtrattributeId} AND COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISACTIVE=1";
+        //                        using (var dsAttributeValues = _xSupport.GetSQLDataSet(queryAttributeValues, null))
+        //                        {
+        //                            try
+        //                            {
+        //                                if (dsAttributeValues.Count > 0)
+        //                                {
+        //                                    for (int v = 0; v < dsAttributeValues.Count; v++)
+        //                                    {
+        //                                        var mtrattributevalueId = dsAttributeValues.GetAsInteger(v, "MTRATTRIBUTELN");
+        //                                        //Attribute Value Translation
+        //                                        var attributevaluetranslationlist = new List<AttributeValueTranslation>();
+        //                                        var queryAttributeValueTranslation = $@"SELECT MTRATTRIBUTE,MTRATTRIBUTELN,CCCLANGUAGE,TRANSLATION FROM CCCATTIBUTETRANSLATION 
+        //                                                                                WHERE MTRATTRIBUTE={mtrattributeId} AND MTRATTRIBUTELN={mtrattributevalueId} 
+        //                                                                                AND COMPANY={_xSupport.ConnectionInfo.CompanyId} AND ISNULL(CCCLANGUAGE,0)<>0 AND DATATYPE=2";
+        //                                        using (var dsAttributeValueTranslation = _xSupport.GetSQLDataSet(queryAttributeValueTranslation, null))
+        //                                        {
+        //                                            if (dsAttributeValueTranslation != null)
+        //                                            {
+        //                                                try
+        //                                                {
+        //                                                    if (dsAttributeValueTranslation.Count > 0)
+        //                                                    {
+        //                                                        for (int t = 0; t < dsAttributeValueTranslation.Count; t++)
+        //                                                        {
+        //                                                            var resAttributeValueTranslation = new AttributeValueTranslation
+        //                                                            {
+        //                                                                LanguageCode = dsAttributeValueTranslation.GetAsInteger(t, "CCCLANGUAGE"),
+        //                                                                Description = dsAttributeValueTranslation.GetAsString(t, "TRANSLATION")
+        //                                                            };
+        //                                                            attributevaluetranslationlist.Add(resAttributeValueTranslation);
+        //                                                        }
+        //                                                    }
+        //                                                }
+        //                                                catch (Exception ex)
+        //                                                {
+        //                                                    throw new Exception(ex.Message);
+        //                                                }
+        //                                            }
+        //                                        }
+        //                                        var resAttributeValues = new AttributeValue
+        //                                        {
+        //                                            SoftOneId = dsAttributeValues.GetAsInteger(v, "MTRATTRIBUTELN"),
+        //                                            Code = dsAttributeValues.GetAsString(v, "CODE"),
+        //                                            Translations = attributevaluetranslationlist
+        //                                        };
+        //                                        attributevaluelist.Add(resAttributeValues);
+        //                                    }
+        //                                }
+        //                            }
+        //                            catch (Exception ex)
+        //                            {
+        //                                throw new Exception(ex.Message);
+        //                            }
+        //                        }
+        //                        var res = new AttributeRecord
+        //                        {
+        //                            SoftOneId = dsAttributes.GetAsInteger(i, "MTRATTRIBUTE"),
+        //                            Code = dsAttributes.GetAsString(i, "CODE"),
+        //                            Translations = attributetranslationlist,
+        //                            Values = attributevaluelist
+        //                        };
+        //                        attributelist.Add(res);
+        //                    }
+        //                }
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                throw new Exception(ex.Message);
+        //            }
+        //        }
+        //        sqldata = attributelist;
+        //        return sqldata;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return sqldata;
+        //        throw new Exception(ex.Message);
+        //    }
+        //}
         public string CreateUpdateAttributes(List<AttributeRecord> attributes)
         {
             var logs_remarks = "";
@@ -1660,7 +1723,12 @@ namespace MothercareImportData.Services
                             if (attributeId > 0)
                             {
                                 AttributeObj.LocateData(attributeId);
-                                var name = attr.Translations.Any() ? attr.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description : (AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] != "" ? AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] : attr.Code);
+
+                                var dbName =Convert.ToString(AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"]);
+                                var name = attr.Translations.Any() ? attr.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description
+                                                                    : !string.IsNullOrWhiteSpace(dbName) ? dbName : attr.Code;
+                                //var name = attr.Translations.Any() ? attr.Translations.OrderBy(x => x.LanguageCode).FirstOrDefault().Description : 
+                                //    (AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] != "" ? AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] : attr.Code);
                                 AttributeObj.GetTable("MTRATTRIBUTE").Current["NAME"] = name;
                                 if (attr.Translations.Count > 0)
                                 {
@@ -1669,10 +1737,21 @@ namespace MothercareImportData.Services
                                         //Πίνακας ATTIBUTETRANSH
                                         using (var attributetrnsh = AttributeObj.GetTable("ATTIBUTETRANSH"))
                                         {
-                                            var recNo1 = attributetrnsh.Find("MTRATTRIBUTE;CCCLANGUAGE", attributeId, trns.LanguageCode);
+                                            var recNo1 = -1;
+                                            for (var i = 0; i < attributetrnsh.Count; i++)
+                                            {
+                                                var recattributeId = Convert.ToInt32(attributetrnsh[i, "MTRATTRIBUTE"]);
+                                                var reclang = Convert.ToInt32(attributetrnsh[i, "CCCLANGUAGE"]);
+                                                if (reclang == trns.LanguageCode && recattributeId == attributeId)
+                                                {
+                                                    recNo1 = i;
+                                                    break;
+                                                }
+                                            }
+                                            attributetrnsh.Current.Edit(recNo1);
+                                            //var recNo1 = attributetrnsh.Find("MTRATTRIBUTE;CCCLANGUAGE", attributeId, trns.LanguageCode);
                                             if (recNo1 != -1)
                                             {
-                                                attributetrnsh.Current.Append();
                                                 //attributetrnsh.Current["MTRATTRIBUTE"] = attributeId;
                                                 attributetrnsh.Current["CCCLANGUAGE"] = trns.LanguageCode;
                                                 attributetrnsh.Current["TRANSLATION"] = trns.Description;
@@ -1680,6 +1759,7 @@ namespace MothercareImportData.Services
                                             }
                                             else
                                             {
+                                                attributetrnsh.Current.Append();
                                                 attributetrnsh.Current["CCCLANGUAGE"] = trns.LanguageCode;
                                                 attributetrnsh.Current["TRANSLATION"] = trns.Description;
                                                 //attributetrnsh.Current.Post();
@@ -1697,7 +1777,21 @@ namespace MothercareImportData.Services
                                         {
                                             if (val.SoftOneId > 0)
                                             {
-                                                var recNo1 = mtrattributeln.Find("MTRATTRIBUTE;MTRATTRIBUTELN;CODE", attributeId, attributelnId, val.Code);
+                                                var recNo1 = -1;
+                                                for (var i = 0; i < mtrattributeln.Count; i++)
+                                                { 
+
+                                                    var recattributeId = Convert.ToInt32(mtrattributeln[i, "MTRATTRIBUTE"]);
+                                                    var recattributelnId = Convert.ToInt32(mtrattributeln[i, "MTRATTRIBUTELN"]);
+                                                    var reccode = Convert.ToString(mtrattributeln[i, "CODE"]);
+                                                    if (recattributeId == attributeId /*&& recattributelnId == attributelnId*/ && reccode == val.Code)
+                                                    {
+                                                        recNo1 = i;
+                                                        break;
+                                                    }
+                                                }
+                                                mtrattributeln.Current.Edit(recNo1);
+                                                //var recNo1 = mtrattributeln.Find("MTRATTRIBUTE;MTRATTRIBUTELN;CODE", attributeId, attributelnId, val.Code);
                                                 if (recNo1 != -1)
                                                 {
                                                     //mtrattributeln.Current["CODE"] = val.Code;
@@ -1721,8 +1815,21 @@ namespace MothercareImportData.Services
                                                     //Πίνακας ATTIBUTETRANSLN
                                                     using (var attributetrnsln = AttributeObj.GetTable("ATTIBUTETRANSLN"))
                                                     {
-                                                        var test = attributetrnsln.JSON();
-                                                        var recNo1 = attributetrnsln.Find("MTRATTRIBUTE;MTRATTRIBUTELN;CCCLANGUAGE", attributeId, attributelnId, trnsln.LanguageCode);
+                                                        //var test = attributetrnsln.JSON();
+                                                        var recNo1 = -1;
+                                                        for (var i = 0; i < attributetrnsln.Count; i++)
+                                                        {
+                                                            var recattributeId = Convert.ToInt32(attributetrnsln[i, "MTRATTRIBUTE"]);
+                                                            var recattributelnId = Convert.ToInt32(attributetrnsln[i, "MTRATTRIBUTELN"]);
+                                                            var reclang = Convert.ToInt32(attributetrnsln[i, "CCCLANGUAGE"]);
+                                                            if (reclang == trnsln.LanguageCode && recattributeId == attributeId && recattributelnId == attributelnId)
+                                                            {
+                                                                recNo1 = i;
+                                                                break;
+                                                            }
+                                                        }
+                                                        attributetrnsln.Current.Edit(recNo1);
+                                                        //var recNo1 = attributetrnsln.Find("MTRATTRIBUTE;MTRATTRIBUTELN;CCCLANGUAGE", attributeId, attributelnId, trnsln.LanguageCode);
                                                         if (recNo1 != -1)
                                                         {
                                                             attributetrnsln.Current["CCCLANGUAGE"] = trnsln.LanguageCode;
@@ -1814,7 +1921,8 @@ namespace MothercareImportData.Services
             }
             return logs_remarks;
         }
-        public string CreateUpdateProductAttributes(List<ProductAttributeRecord> productAttributes, List<SqlData> sqldata, List<AttributeRecord> attributes)
+
+        public string CreateUpdateProductAttributesNew(List<ProductAttributeRecord> productAttributes, List<SqlData> sqldata, List<AttributeRecord> attributes)
         {
             var logs_remarks = "";
             // Implementation for creating or updating product attributes
@@ -1841,102 +1949,103 @@ namespace MothercareImportData.Services
                     }).ToList()
             }).ToList()
             }).ToList();
-
             if (groupedResult.Count > 0)
             {
-                ProgressNotify(1, 1); //Ξεκινά την μπάρα
-                MarkStage(1); //Γράφει στάδιο					
-                ProgressNotify(2, groupedResult.Count); //Χωρίζει την μπάρα σε κομμάτια
+                ProgressNotify(1, 1);
+                MarkStage(1);
+                ProgressNotify(2, groupedResult.Count);
                 var counter = 0;
-                foreach (var arrtibuteItem in groupedResult)
+                foreach (var productItem in groupedResult)
                 {
                     counter++;
-                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
-                    var productcode = arrtibuteItem.ProductCode;
+                    ProgressNotify(3, counter);
+                    var productcode = productItem.ProductCode;
+                    // Βρίσκουμε το MTRL του είδους
                     var mtrl = sqldata.Where(x => x.Obj == "item" && x.Code.Trim() == productcode.Trim()).FirstOrDefault()?.Id ?? 0;
-                    var attributesitem = arrtibuteItem.Attributes;
-                    if (mtrl > 0 && attributesitem.Count > 0)
+                    if (mtrl <= 0)
                     {
-                        using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                        logs_remarks += $"Το Είδος «{productcode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
+                        continue;
+                    }
+                    var attributesitem = productItem.Attributes;
+                    if (attributesitem == null || attributesitem.Count == 0)
+                        continue;
+                    foreach (var attribute in attributesitem)
+                    {
+                        try 
                         {
-                            try
+                            // ============================================
+                            // ATTRIBUTE
+                            // ============================================
+                            var attribute_list = attributes.FirstOrDefault(x => x.Code.Trim().Equals(attribute.AttributeCode.Trim(), StringComparison.OrdinalIgnoreCase));
+                            var attributeId = attribute_list != null ? attribute_list.SoftOneId : 0;
+                            if (attributeId <= 0)
                             {
-                                ItemObj.LocateData(mtrl);
-                                using (var mtrattributes = ItemObj.GetTable("MTRLATTRIBUTES"))
-                                {
-                                    foreach (var attribute in attributesitem)
-                                    {
-                                        try
-                                        {
-                                            var attribute_list = attributes.Where(x => x.Code.Trim() == attribute.AttributeCode.Trim()).FirstOrDefault();
-                                            var attributeId = attribute_list != null ? attribute_list.SoftOneId : 0;
-                                            if (attributeId > 0)
-                                            {
-                                                var attributevalues = attribute.Values.FirstOrDefault();
-                                                var attributevalue_list = attribute_list.Values.Where(x => x.Code.Trim() == attributevalues.AttributeValueCode.Trim()).FirstOrDefault();
-                                                var attributevalueId = attributevalue_list != null ? attributevalue_list.SoftOneId : 0;
-                                                var recNo1 = mtrattributes.Find("MTRATTRIBUTE", attributeId);
-                                                if (recNo1 != -1 && Convert.ToInt32(mtrattributes.Current["MTRATTRIBUTELN"]) != attributevalueId)
-                                                {
-                                                    mtrattributes.Current["MTRATTRIBUTELN"] = attributevalueId;
-                                                }
-                                                else
-                                                {
-                                                    mtrattributes.Current.Append();
-                                                    mtrattributes.Current["MTRATTRIBUTE"] = attributeId;
-                                                    if (attributevalueId > 0)
-                                                    {
-                                                        mtrattributes.Current["MTRATTRIBUTELN"] = attributevalueId;
-                                                    }
-                                                }
-                                                var freetexttranslations = attributevalues.Translations;
-                                                //attributevalue_list.Translations;
-                                                foreach (var trns in freetexttranslations.OrderBy(x => x.LanguageCode))
-                                                {
-                                                    //Πίνακας ATTIBUTETRANSLN
-                                                    using (var attributefreetext = ItemObj.GetTable("CCCATTRIBUTEFREETEXT"))
-                                                    {
-                                                        var recTrNo1 = attributefreetext.Find("MTRATTRIBUTE;CCCLANGUAGE", attributeId, trns.LanguageCode);
-                                                        if (recTrNo1 != -1)
-                                                        {
-                                                            attributefreetext.Current["CCCLANGUAGE"] = trns.LanguageCode;
-                                                            attributefreetext.Current["FREETXT"] = trns.Description;
-                                                        }
-                                                        else
-                                                        {
-                                                            attributefreetext.Current.Append();
-                                                            attributefreetext.Current["CCCLANGUAGE"] = trns.LanguageCode;
-                                                            attributefreetext.Current["FREETXT"] = trns.Description;
-                                                        }
-                                                        attributefreetext.Current.Post();
-                                                    }
-                                                }
-                                                //
-                                                mtrattributes.Current.Post();
-                                                //prepei na diagrafo auta pou den vrisko?
-                                            }
-                                            else
-                                            {
-                                                logs_remarks = logs_remarks + $"Το Attribute «{attribute.AttributeCode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
-                                            }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            logs_remarks = logs_remarks + $"Πρόβλημα στο Είδος «{productcode}» και στο Attribute «{attribute.AttributeCode}»." + ex.Message + Environment.NewLine;
-                                        }
-                                    }
-                                }
-                                ItemObj.PostData();
+                                logs_remarks +=$"Το Attribute «{attribute.AttributeCode}» δεν βρέθηκε στο Softone για το είδος «{productcode}»."+ Environment.NewLine;
+                                continue;
                             }
-                            catch (Exception ex)
+                            // ============================================
+                            // ATTRIBUTE VALUE
+                            // ============================================
+                            var attributevalueId = 0;
+                            var attributevalues = attribute.Values.FirstOrDefault();
+                            if (attributevalues != null && attribute_list.Values != null)
                             {
-                                logs_remarks = logs_remarks + $"Πρόβλημα στο Είδος «{productcode}»" + ex.Message + Environment.NewLine;
+                                var attributevalue_list = attribute_list.Values.FirstOrDefault(x => x.Code.Trim().Equals(attributevalues.AttributeValueCode.Trim(), StringComparison.OrdinalIgnoreCase));
+                                if (attributevalue_list != null)
+                                {
+                                    attributevalueId = attributevalue_list.SoftOneId;
+                                }
+                            }
+                            // ============================================
+                            // MTRLATTRIBUTES
+                            // INSERT / UPDATE
+                            // ============================================
+                            var attributeValueSql = attributevalueId > 0 ? attributevalueId.ToString() : "NULL";
+                            var updquery = $@"IF EXISTS (SELECT 1 FROM MTRLATTRIBUTES WHERE MTRL = {mtrl} AND MTRATTRIBUTE = {attributeId})
+                                            BEGIN
+                                                UPDATE MTRLATTRIBUTES SET MTRATTRIBUTELN = {attributeValueSql} WHERE MTRL = {mtrl} AND MTRATTRIBUTE = {attributeId}
+                                            END
+                                            ELSE
+                                            BEGIN
+                                                DECLARE @LineNum INT;
+                                                SELECT @LineNum = ISNULL(MAX(LINENUM), 0) + 1 FROM MTRLATTRIBUTES WITH (UPDLOCK, HOLDLOCK) WHERE MTRL = {mtrl};
+                                                INSERT INTO MTRLATTRIBUTES (COMPANY,LINENUM,MTRL,MTRATTRIBUTE,MTRATTRIBUTELN) 
+                                                VALUES({_xSupport.ConnectionInfo.CompanyId},@LineNum,{mtrl},{attributeId},{attributeValueSql})
+                                            END";
+                            _xSupport.ExecuteSQL(updquery);
+                            // ============================================
+                            // CCCATTRIBUTEFREETEXT
+                            // INSERT / UPDATE
+                            // ============================================
+                            var freetextTranslations = attributevalues != null ? attributevalues.Translations : null;
+                            if (freetextTranslations != null)
+                            {
+                                foreach (var trns in freetextTranslations.OrderBy(x => x.LanguageCode))
+                                {
+                                    var description = trns.Description ?? "";
+                                    // Ασφάλεια για apostrophe
+                                    description = description.Replace("'", "''");
+                                    var languageCode = trns.LanguageCode;
+                                    var freeTextQuery = $@"IF EXISTS (SELECT 1 FROM CCCATTRIBUTEFREETEXT WHERE MTRL = {mtrl} AND MTRATTRIBUTE = {attributeId} AND CCCLANGUAGE = {languageCode})
+                                                            BEGIN
+                                                                UPDATE CCCATTRIBUTEFREETEXT SET FREETXT = '{description.Replace("'", "΄")}' WHERE MTRL = {mtrl} AND MTRATTRIBUTE = {attributeId} AND CCCLANGUAGE = {languageCode}
+                                                            END
+                                                            ELSE
+                                                            BEGIN
+                                                                DECLARE @LineNum INT;
+                                                                SELECT @LineNum = ISNULL(MAX(LINENUM), 0) + 1 FROM CCCATTRIBUTEFREETEXT WITH (UPDLOCK, HOLDLOCK) WHERE MTRL = {mtrl};
+                                                                INSERT INTO CCCATTRIBUTEFREETEXT (COMPANY,LINENUM,MTRL,MTRATTRIBUTE,CCCLANGUAGE,FREETXT) 
+                                                                VALUES({_xSupport.ConnectionInfo.CompanyId},@LineNum,{mtrl},{attributeId},{languageCode},'{description.Replace("'", "΄")}')
+                                                            END";
+                                    _xSupport.ExecuteSQL(freeTextQuery);
+                                }
                             }
                         }
-                    }
-                    else
-                    {
-                        logs_remarks = logs_remarks + $"Το Είδος «{productcode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
+                        catch (Exception ex)
+                        {
+                            logs_remarks += $"Πρόβλημα στο Είδος «{productcode}» και στο Attribute «{attribute.AttributeCode}». " + ex.Message + Environment.NewLine;
+                        }
                     }
                 }
                 MarkStage(2);
@@ -1948,12 +2057,180 @@ namespace MothercareImportData.Services
             }
             return logs_remarks;
         }
+        //public string CreateUpdateProductAttributes(List<ProductAttributeRecord> productAttributes, List<SqlData> sqldata, List<AttributeRecord> attributes)
+        //{
+        //    var logs_remarks = "";
+        //    // Implementation for creating or updating product attributes
+        //    List<ProductAttributesGrouped> groupedResult = productAttributes.GroupBy(x => x.ProductCode).Select(productGroup => new ProductAttributesGrouped
+        //    {
+        //        ProductCode = productGroup.Key,
+        //        Attributes = productGroup
+        //    .GroupBy(x => x.AttributeCode).Select(attributeGroup => new ProductAttributeGrouped
+        //    {
+        //        AttributeCode = attributeGroup.Key,
+        //        Values = attributeGroup
+        //            .GroupBy(x => x.AttributeValueCode)
+        //            .Select(valueGroup => new ProductAttributeValueGrouped
+        //            {
+        //                AttributeValueCode = valueGroup.Key,
+        //                Translations = valueGroup
+        //                    .Where(x => !string.IsNullOrWhiteSpace(x.FreeText))
+        //                    .GroupBy(x => x.LanguageCode)
+        //                    .Select(languageGroup => new ProductAttributeTranslation
+        //                    {
+        //                        LanguageCode = languageGroup.Key,
+        //                        Description = languageGroup.First().FreeText
+        //                    }).ToList()
+        //            }).ToList()
+        //    }).ToList()
+        //    }).ToList();
+
+        //    if (groupedResult.Count > 0)
+        //    {
+        //        ProgressNotify(1, 1); //Ξεκινά την μπάρα
+        //        MarkStage(1); //Γράφει στάδιο					
+        //        ProgressNotify(2, groupedResult.Count); //Χωρίζει την μπάρα σε κομμάτια
+        //        var counter = 0;
+        //        foreach (var arrtibuteItem in groupedResult)
+        //        {
+        //            counter++;
+        //            ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+        //            var productcode = arrtibuteItem.ProductCode;
+        //            var mtrl = sqldata.Where(x => x.Obj == "item" && x.Code.Trim() == productcode.Trim()).FirstOrDefault()?.Id ?? 0;
+        //            var attributesitem = arrtibuteItem.Attributes;
+        //            if (mtrl > 0 && attributesitem.Count > 0)
+        //            {
+        //                using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+        //                {
+        //                    try
+        //                    {
+        //                        ItemObj.LocateData(mtrl);
+        //                        using (var mtrattributes = ItemObj.GetTable("MTRLATTRIBUTES"))
+        //                        {
+        //                            foreach (var attribute in attributesitem)
+        //                            {
+        //                                try
+        //                                {
+        //                                    var attribute_list = attributes.Where(x => x.Code.Trim() == attribute.AttributeCode.Trim()).FirstOrDefault();
+        //                                    var attributeId = attribute_list != null ? attribute_list.SoftOneId : 0;
+        //                                    if (attributeId > 0)
+        //                                    {
+        //                                        var attributevalues = attribute.Values.FirstOrDefault();
+        //                                        var attributevalue_list = attribute_list.Values.Where(x => x.Code.Trim() == attributevalues.AttributeValueCode.Trim()).FirstOrDefault();
+        //                                        var attributevalueId = attributevalue_list != null ? attributevalue_list.SoftOneId : 0;
+        //                                        var recNo1 = -1;
+        //                                        for (var i = 0; i < mtrattributes.Count; i++)
+        //                                        {
+        //                                            var recattributeId = Convert.ToInt32(mtrattributes[i, "MTRATTRIBUTE"]);
+        //                                            if (recattributeId == attributeId)
+        //                                            {
+        //                                                recNo1 = i;
+        //                                                break;
+        //                                            }
+        //                                        }
+        //                                        mtrattributes.Current.Edit(recNo1);
+        //                                        //var recNo1 = mtrattributes.Find("MTRATTRIBUTE", attributeId);
+        //                                        if (recNo1 != -1)
+        //                                        {
+        //                                            if (Convert.ToInt32(mtrattributes.Current["MTRATTRIBUTELN"] != DBNull.Value ? mtrattributes.Current["MTRATTRIBUTELN"] : 0) != attributevalueId)
+        //                                            {
+        //                                                if (attributevalueId > 0)
+        //                                                {
+        //                                                    mtrattributes.Current["MTRATTRIBUTELN"] = attributevalueId;
+        //                                                }
+        //                                                else
+        //                                                {
+        //                                                    mtrattributes.Current["MTRATTRIBUTELN"] = null;
+        //                                                }
+        //                                            }
+        //                                        }
+        //                                        else
+        //                                        {
+        //                                            mtrattributes.Current.Append();
+        //                                            mtrattributes.Current["MTRATTRIBUTE"] = attributeId;
+        //                                            if (attributevalueId > 0)
+        //                                            {
+        //                                                mtrattributes.Current["MTRATTRIBUTELN"] = attributevalueId;
+        //                                            }
+        //                                        }
+        //                                        var freetexttranslations = attributevalues.Translations;
+        //                                        //attributevalue_list.Translations;
+        //                                        foreach (var trns in freetexttranslations.OrderBy(x => x.LanguageCode))
+        //                                        {
+        //                                            //Πίνακας ATTIBUTETRANSLN
+        //                                            using (var attributefreetext = ItemObj.GetTable("CCCATTRIBUTEFREETEXT"))
+        //                                            {
+        //                                                var recTrNo1 = -1;
+        //                                                for (var i = 0; i < attributefreetext.Count; i++)
+        //                                                {
+        //                                                    var recattributeId = Convert.ToInt32(attributefreetext[i, "MTRATTRIBUTE"]);
+        //                                                    var reclang = Convert.ToInt32(attributefreetext[i, "CCCLANGUAGE"]);
+        //                                                    var tets = attributefreetext.CreateDataTable(true).AsEnumerable().ToList();
+        //                                                    if (reclang == trns.LanguageCode && recattributeId == attributeId)
+        //                                                    {
+        //                                                        recTrNo1 = i;
+        //                                                        break;
+        //                                                    }
+        //                                                }
+        //                                                attributefreetext.Current.Edit(recTrNo1);
+        //                                                var recTrNo22222 = attributefreetext.Find("MTRATTRIBUTE;CCCLANGUAGE", attributeId, trns.LanguageCode);
+        //                                                if (recTrNo1 != -1)
+        //                                                {
+        //                                                    attributefreetext.Current["CCCLANGUAGE"] = trns.LanguageCode;
+        //                                                    attributefreetext.Current["FREETXT"] = trns.Description;
+        //                                                }
+        //                                                else
+        //                                                {
+        //                                                    attributefreetext.Current.Append();
+        //                                                    attributefreetext.Current["CCCLANGUAGE"] = trns.LanguageCode;
+        //                                                    attributefreetext.Current["FREETXT"] = trns.Description;
+        //                                                }
+        //                                                attributefreetext.Current.Post();
+        //                                            }
+        //                                        }
+        //                                        //
+        //                                        mtrattributes.Current.Post();
+        //                                        //prepei na diagrafo auta pou den vrisko?
+        //                                    }
+        //                                    else
+        //                                    {
+        //                                        logs_remarks = logs_remarks + $"Το Attribute «{attribute.AttributeCode}» δεν βρέθηκε στο Softone για το είδος «{productcode}»." + Environment.NewLine;
+        //                                    }
+        //                                }
+        //                                catch (Exception ex)
+        //                                {
+        //                                    logs_remarks = logs_remarks + $"Πρόβλημα στο Είδος «{productcode}» και στο Attribute «{attribute.AttributeCode}»." + ex.Message + Environment.NewLine;
+        //                                }
+        //                            }
+        //                        }
+        //                        ItemObj.PostData();
+        //                    }
+        //                    catch (Exception ex)
+        //                    {
+        //                        logs_remarks = logs_remarks + $"Πρόβλημα στο Είδος «{productcode}»" + ex.Message + Environment.NewLine;
+        //                    }
+        //                }
+        //            }
+        //            else
+        //            {
+        //                logs_remarks = logs_remarks + $"Το Είδος «{productcode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
+        //            }
+        //        }
+        //        MarkStage(2);
+        //        MarkStage(3);
+        //        MarkStage(0);
+        //        ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+        //        var resultsprocess = "result1,result2,result3";
+        //        _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+        //    }
+        //    return logs_remarks;
+        //}
         public List<NidRecord> GetNids()
         {
             var sqldata = new List<NidRecord>();
             try
             {
-                var query = "SELECT M.MTRL,I.STORE,M.CODE,I.NID,I.INSDATE FROM MTRL M INNER JOIN CCCNID I ON I.MTRL=M.MTRL";
+                var query = "SELECT M.MTRL,I.STORE,ISNULL(M.CCCMCOLDCODE,M.CODE) AS CODE,I.NID,I.INSDATE FROM MTRL M INNER JOIN CCCNID I ON I.MTRL=M.MTRL";
                 using (var ds = _xSupport.GetSQLDataSet(query, null))
                 {
                     try
@@ -2003,6 +2280,37 @@ namespace MothercareImportData.Services
                 throw new Exception(ex.Message);
             }
         }
+        public List<AddOnRecord> GetSqlAddOns()
+        { 
+            var addons = new List<AddOnRecord>();
+            var query = $@"SELECT ISNULL(M1.CCCMCOLDCODE,M1.CODE) AS ITEMCODE,ISNULL(M2.CCCMCOLDCODE,M2.CODE) AS ADDONITEMCODE FROM CCCADDONS A
+                    LEFT JOIN MTRL M1 ON M1.MTRL =A.MTRL LEFT JOIN MTRL M2 ON M2.MTRL = A.ADDONMTRL
+                    WHERE A.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND M2.CODE IS NOT NULL AND M1.CODE IS NOT NULL";
+            using (var ds = _xSupport.GetSQLDataSet(query, null))
+            {
+                try
+                {
+                    if (ds.Count > 0)
+                    {
+                        for (int i = 0; i < ds.Count; i++)
+                        {
+                            var res = new AddOnRecord
+                            {
+                                ItemCode = ds.GetAsString(i, "ITEMCODE"),
+                                AddOnItemCode = ds.GetAsString(i, "ADDONITEMCODE")
+                            };
+                            addons.Add(res);
+                        }
+                    }
+                    return addons;
+                }
+                catch (Exception ex)
+                {
+                    return addons;
+                    throw new Exception(ex.Message);
+                }
+            }
+        }
         public string SetAddOns(List<AddOnRecord> exceldata, List<SqlData> item_list)
         {
             var logs_remarks = "";
@@ -2031,30 +2339,61 @@ namespace MothercareImportData.Services
 
                         if (mtrl > 0 && addonitemcodes.Count > 0)
                         {
-                            using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                            var queryMaxId = $@"SELECT ISNULL(MAX(LINENUM),0) AS MAXID FROM CCCADDONS WHERE COMPANY={_xSupport.ConnectionInfo.CompanyId} AND MTRL={mtrl}";
+                            var dsMaxId = _xSupport.SQL(queryMaxId, null);
+                            var maxid = dsMaxId != null ? Convert.ToInt32(dsMaxId) : 0;
+                            foreach (var code in addonitemcodes)
                             {
-                                ItemObj.LocateData(mtrl);
-                                using (var mtraddon = ItemObj.GetTable("CCCADDONS"))
+                                //05/10/2026
+                                var addon_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
+                                var addonItem = addon_list != null ? addon_list.Id : 0;
+                                if (addonItem == 0)
                                 {
-                                    foreach (var code in addonitemcodes)
-                                    {
-                                        var addon_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
-                                        var addonItem = addon_list != null ? addon_list.Id : 0;
-                                        var recNo1 = mtraddon.Find("ADDONMTRL", addonItem);
-                                        if (recNo1 == -1)
-                                        {
-                                            mtraddon.Current.Append();
-                                            mtraddon.Current["ADDONMTRL"] = addonItem;
-                                            mtraddon.Current.Post();
-                                        }
-                                    }
+                                    logs_remarks = logs_remarks + $"Δεν υπάρχει το Add On είδος «{code}» για το είδος «{addon.ItemCode}»." + Environment.NewLine;
+                                    continue;
                                 }
-                                ItemObj.PostData();
+                                else
+                                {
+                                    maxid += 1;
+                                    var updquery = $@"INSERT INTO CCCADDONS (COMPANY,MTRL,LINENUM,ADDONMTRL)
+                                               VALUES ({_xSupport.ConnectionInfo.CompanyId},{mtrl},{maxid},{addonItem});";
+                                    _xSupport.ExecuteSQL(updquery);
+                                }
                             }
+                            //using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
+                            //{
+                            //    ItemObj.LocateData(mtrl);
+                            //    using (var mtraddon = ItemObj.GetTable("CCCADDONS"))
+                            //    {
+                            //        foreach (var code in addonitemcodes)
+                            //        {
+                            //            var addon_list = item_list.Where(x => x.Code.Trim() == code.Trim()).FirstOrDefault();
+                            //            var addonItem = addon_list != null ? addon_list.Id : 0;
+                            //            var recNo1 = mtraddon.Find("ADDONMTRL", addonItem);
+                            //            if (recNo1 == -1)
+                            //            {
+                            //                mtraddon.Current.Append();
+                            //                mtraddon.Current["ADDONMTRL"] = addonItem;
+                            //                mtraddon.Current.Post();
+                            //            }
+                            //        }
+                            //    }
+                            //    ItemObj.PostData();
+                            //}
                         }
                         else
                         {
-                            logs_remarks = logs_remarks + $"Το Είδος «{addon.ItemCode}» δεν βρέθηκε." + Environment.NewLine;
+                            if (mtrl == 0)
+                            {
+                                logs_remarks = logs_remarks + $"Το Είδος «{addon.ItemCode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
+                            }
+                            var notexistaddoncodeslist = addon.AddOnItemCodes.Where(code => !item_list.Any(item => item.Code.Trim() == code.Trim())).ToList();
+                            if (notexistaddoncodeslist.Count > 0)
+                            {
+                                var notexistsimilarcodes = String.Join(",", notexistaddoncodeslist);
+                                logs_remarks = logs_remarks + $"Δεν υπάρχουν οι κωδικοί add on ({notexistsimilarcodes}) για το είδος «{addon.ItemCode}»." + Environment.NewLine;
+                            }
+                            //logs_remarks = logs_remarks + $"Το Είδος «{addon.ItemCode}» δεν βρέθηκε." + Environment.NewLine;
                         }
                     }
                     catch (Exception ex)
@@ -2069,6 +2408,151 @@ namespace MothercareImportData.Services
                 var resultsprocess = "result1,result2,result3";
                 _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
             }
+            return logs_remarks;
+        }
+        public List<ItemTextsRecord> GetSqlTexts()
+        {
+            var texts = new List<ItemTextsRecord>();
+            var query = $@"SELECT M.MTRL,ISNULL(M.CCCMCOLDCODE,M.CODE) AS CODE,
+                            ISNULL(CCCLANGUAGE,'') AS CCCLANGUAGE,
+                            ISNULL(ESHOPTITLE,0) AS ESHOPTITLE,
+                            ISNULL(SMALLDESCR,'') AS SMALLDESCR,
+                            ISNULL(BIGDESCR,'') AS BIGDESCR,
+                            ISNULL(LABALTITLE,'') AS LABALTITLE,
+                            ISNULL(LABALDESCR,'') AS LABALDESCR,
+                            ISNULL(FEATURESBENEFITSTXT,'') AS FEATURESBENEFITSTXT
+                            FROM MTRL M
+                            LEFT JOIN CCCDESCRIPTIONS D ON D.MTRL=M.MTRL
+                            WHERE M.COMPANY={_xSupport.ConnectionInfo.CompanyId} AND M.SODTYPE = 51 AND ISNULL(M.CCCITEMCOMPANY,0) IN (0,2)
+                            AND (ISNULL(CCCLANGUAGE,0)<>0 OR ISNULL(ESHOPTITLE,'')<>'' OR ISNULL(SMALLDESCR,'')<>'' OR ISNULL(BIGDESCR,'')<>'' 
+                            OR ISNULL(LABALTITLE,'')<>'' OR ISNULL(LABALDESCR,'')<>'' OR ISNULL(FEATURESBENEFITSTXT,'')<>'')";
+            using (var ds = _xSupport.GetSQLDataSet(query, null))
+            {
+                try
+                {
+                    if (ds.Count > 0)
+                    {
+                        var grouped = Enumerable.Range(0, ds.Count).GroupBy(i => Convert.ToString(ds[i, "CODE"]).Trim());
+                        foreach (var productGroup in grouped)
+                        {
+                            var firstIndex = productGroup.First();
+                            var item = new ItemTextsRecord
+                            {
+                                ItemCode = Convert.ToString(ds[firstIndex, "CODE"]).Trim(),
+                                Texts = new List<TextsTranslation>()
+                            };
+                            foreach (var index in productGroup)
+                            {
+                                var languageCode = Convert.ToInt32(ds[index, "CCCLANGUAGE"]);
+                                item.Texts.Add(new TextsTranslation
+                                {
+                                    LanguageCode = languageCode,
+                                    EshopTitle = Convert.ToString(ds[index, "ESHOPTITLE"]),
+                                    SmallDescription = Convert.ToString(ds[index, "SMALLDESCR"]),
+                                    LongDescription = Convert.ToString(ds[index, "BIGDESCR"]),
+                                    LabelTitle = Convert.ToString(ds[index, "LABALTITLE"]),
+                                    LabelDescription = Convert.ToString(ds[index, "LABALDESCR"]),
+                                    FeaturesAndBenefits = Convert.ToString(ds[index, "FEATURESBENEFITSTXT"])
+                                });
+                            }
+                            texts.Add(item);
+                        }
+                    }
+                    return texts;
+                }
+                catch (Exception ex)
+                {
+                    return texts;
+                    throw new Exception(ex.Message);
+                }
+            }
+        }
+        public string SetItemTextsNew(List<ItemTextsRecord> exceldata, List<SqlData> item_list)
+        {
+            var logs_remarks = "";
+            if (exceldata == null || exceldata.Count == 0)
+                return logs_remarks;
+            ProgressNotify(1, 1);
+            MarkStage(1);
+            ProgressNotify(2, exceldata.Count);
+            var counter = 0;
+            foreach (var text in exceldata)
+            {
+                counter++;
+                ProgressNotify(3, counter);
+                try
+                {
+                    // Βρίσκουμε το MTRL
+                    var mtrlItem = item_list.FirstOrDefault(x => x.Code.Trim().Equals(text.ItemCode.Trim(), StringComparison.OrdinalIgnoreCase));
+                    var mtrl = mtrlItem != null ? mtrlItem.Id : 0;
+                    if (mtrl <= 0)
+                    {
+                        logs_remarks += $"Το Είδος «{text.ItemCode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
+                        continue;
+                    }
+                    foreach (var trns in text.Texts)
+                    {
+                        try 
+                        {
+                            var textFeaturesAndBenefits = trns.FeaturesAndBenefits ?? "";
+                            var isHtml = Regex.IsMatch(textFeaturesAndBenefits, @"<\s*(html|body|p|div|span|br|strong|b|i|em|ul|ol|li|table|tr|td|a|img|h[1-6])\b[^>]*>", RegexOptions.IgnoreCase);
+                            if (!isHtml && textFeaturesAndBenefits !="")
+                            {
+                                textFeaturesAndBenefits = System.Net.WebUtility.HtmlEncode(textFeaturesAndBenefits);
+                                textFeaturesAndBenefits = textFeaturesAndBenefits.Replace("\r\n", "<br>").Replace("\n", "<br>").Replace("\r", "<br>");
+                                textFeaturesAndBenefits = $"<p>{textFeaturesAndBenefits}</p>";
+                            }
+                            // Escape apostrophes για SQL
+                            var eshopTitle = (trns.EshopTitle ?? "").Replace("'", "''");
+                            var smallDescription = (trns.SmallDescription ?? "").Replace("'", "''");
+                            var longDescription = (trns.LongDescription ?? "").Replace("'", "''");
+                            var labelTitle = (trns.LabelTitle ?? "").Replace("'", "''");
+                            var labelDescription = (trns.LabelDescription ?? "").Replace("'", "''");
+                            var featuresBenefits = textFeaturesAndBenefits.Replace("'", "''");
+                            var languageCode = trns.LanguageCode;
+                            // =====================================================
+                            // CCCDESCRIPTIONS
+                            // INSERT / UPDATE
+                            // =====================================================
+                            var updquery = $@"SET XACT_ABORT ON;
+                                            BEGIN TRANSACTION;
+                                            BEGIN TRY
+                                                IF EXISTS (SELECT 1 FROM CCCDESCRIPTIONS WHERE MTRL = {mtrl} AND CCCLANGUAGE = {languageCode})
+                                                BEGIN
+                                                    UPDATE CCCDESCRIPTIONS
+                                                    SET ESHOPTITLE = '{eshopTitle}', SMALLDESCR = '{smallDescription}', BIGDESCR = '{longDescription}', LABALTITLE = '{labelTitle}', LABALDESCR = '{labelDescription}', FEATURESBENEFITSTXT = '{featuresBenefits}'
+                                                    WHERE MTRL = {mtrl} AND CCCLANGUAGE = {languageCode};
+                                                END
+                                                ELSE
+                                                BEGIN
+                                                    INSERT INTO CCCDESCRIPTIONS (COMPANY,MTRL,CCCLANGUAGE,ESHOPTITLE,SMALLDESCR,BIGDESCR,LABALTITLE,LABALDESCR,FEATURESBENEFITSTXT)
+                                                    VALUES ({_xSupport.ConnectionInfo.CompanyId},{mtrl},{languageCode},'{eshopTitle}','{smallDescription}','{longDescription}','{labelTitle}','{labelDescription}','{featuresBenefits}');
+                                                END;
+                                                COMMIT TRANSACTION;
+                                            END TRY
+                                            BEGIN CATCH
+                                                IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+                                                THROW;
+                                            END CATCH;";
+                            _xSupport.ExecuteSQL(updquery);
+                        }
+                        catch (Exception ex)
+                        {
+                            logs_remarks += $"Πρόβλημα στη γλώσσα «{trns.LanguageCode}», στο κείμενο Είδους «{text.ItemCode}». " + ex.Message + Environment.NewLine;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logs_remarks += $"Πρόβλημα στο κείμενο Είδους «{text.ItemCode}». " + ex.Message + Environment.NewLine;
+                }
+            }
+            MarkStage(2);
+            MarkStage(3);
+            MarkStage(0);
+            ProgressNotify(0, 0);
+            var resultsprocess = "result1,result2,result3";
+            _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE",_xModule.Handle,1,0,resultsprocess);
             return logs_remarks;
         }
         public string SetItemTexts(List<ItemTextsRecord> exceldata, List<SqlData> item_list)
@@ -2317,6 +2801,76 @@ namespace MothercareImportData.Services
             }
             return logs_remarks;
         }
+        public string SetNidNew(List<NidRecord> exceldata, List<SqlData> item_list)
+        {
+            var logs_remarks = "";
+            if (exceldata == null || exceldata.Count == 0)
+                return logs_remarks;
+            ProgressNotify(1, 1);
+            MarkStage(1);
+            ProgressNotify(2, exceldata.Count);
+            var counter = 0;
+            foreach (var nid in exceldata)
+            {
+                counter++;
+                ProgressNotify(3, counter);
+                try
+                {
+                    var itemcode = nid.ItemCode;
+                    var mtrl = item_list.FirstOrDefault(x => x.Code.Trim().Equals(itemcode.Trim(), StringComparison.OrdinalIgnoreCase))?.Id ?? 0;
+                    if (mtrl <= 0)
+                    {
+                        logs_remarks += $"Το Είδος «{nid.ItemCode}» δεν βρέθηκε στο Softone." + Environment.NewLine;
+                        continue;
+                    }
+                    foreach (var store in nid.NidStores)
+                    {
+                        var storeId = store.StoreId;
+                        var nidValue = store.Nid;
+                        var webpage = "";
+                        if (storeId == 11)
+                        {
+                            webpage = "https://www.mothercare.gr/product/" + nidValue.ToString();
+                        }
+                        webpage = webpage.Replace("'", "''");
+                        var updquery = $@"
+                                        SET XACT_ABORT ON;
+                                        BEGIN TRANSACTION;
+                                        BEGIN TRY
+                                            IF EXISTS (SELECT 1 FROM CCCNID WHERE MTRL = {mtrl} AND STORE = {storeId})
+                                            BEGIN
+                                                UPDATE CCCNID SET NID = {nidValue} {(storeId == 11? $@", WEBPAGE = '{webpage}'": "")} WHERE MTRL = {mtrl} AND STORE = {storeId};
+                                            END
+                                            ELSE
+                                            BEGIN
+                                                DECLARE @LineNum INT;
+                                                SELECT @LineNum = ISNULL(MAX(LINENUM), 0) + 1 FROM CCCNID WITH (UPDLOCK, HOLDLOCK) WHERE MTRL = {mtrl};
+                                                INSERT INTO CCCNID (COMPANY,MTRL,LINENUM,STORE,NID{(storeId == 11? ", WEBPAGE": "")})
+                                                VALUES ({_xSupport.ConnectionInfo.CompanyId},{mtrl},@LineNum,{storeId},{nidValue}{(storeId == 11? $", '{webpage}'": "")});
+                                            END;
+                                            COMMIT TRANSACTION;
+                                        END TRY
+                                        BEGIN CATCH
+                                            IF @@TRANCOUNT > 0 
+                                            ROLLBACK TRANSACTION;
+                                            THROW;
+                                        END CATCH;";
+                        _xSupport.ExecuteSQL(updquery);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logs_remarks += $"Πρόβλημα στο NID του Είδους «{nid.ItemCode}». " + ex.Message + Environment.NewLine;
+                }
+            }
+            MarkStage(2);
+            MarkStage(3);
+            MarkStage(0);
+            ProgressNotify(0, 0);
+            var resultsprocess = "result1,result2,result3";
+            _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE",_xModule.Handle,1,0,resultsprocess);
+            return logs_remarks;
+        }
         public string SetNid(List<NidRecord> exceldata, List<SqlData> item_list)
         {
             var logs_remarks = "";
@@ -2361,6 +2915,10 @@ namespace MothercareImportData.Services
                                         {
                                             mtrnid.Current["NID"] = store.Nid;
                                             mtrnid.Current["INSDATE"] = store.InsDate;
+                                            if (storeId == 11)
+                                            {
+                                                mtrnid.Current["WEBPAGE"] = "https://www.mothercare.gr/product/" + store.Nid.ToString();
+                                            }
                                             mtrnid.Current.Post();
                                         }
                                     }
