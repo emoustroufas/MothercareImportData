@@ -119,39 +119,6 @@ namespace MothercareImportData
                 XSupport.Exception(ex.Message);
             }
         }
-        //public void MarkStage(int number)
-        //{
-        //    var results = XModule.GetTable("RESULTS");
-        //    //results.Current.Edit(0);
-        //    results.Current["STAGE"] = number;
-        //    results.Resync();
-        //    XModule.Exec("CODE:ModuleIntf.SENDRESPONSE", XModule.Handle, 0, results.TablePtr);
-        //    results.Current["STAGE"] = 4; //Χρειάζεται ένα στάδιο που δεν υπάρχει για να μην ξαναγράφει
-        //}
-        //public void ProgressNotify(int prmode, int prvalue)
-        //{
-        //    var results = XModule.GetTable("RESULTS");
-        //    //results.Current.Edit(0);
-        //    switch (prmode)
-        //    {
-        //        case 0:
-        //            results.Current["STARTSTOP"] = prvalue;
-        //            break;
-        //        case 1:
-        //            results.Current["STARTSTOP"] = prvalue;
-        //            break;
-        //        case 2:
-        //            results.Current["TOTREC"] = prvalue;
-        //            break;
-        //        case 3:
-        //            results.Current["CURREC"] = prvalue;
-        //            break;
-        //    }
-        //    results.Resync();
-        //    XModule.Exec("CODE:ModuleIntf.SENDRESPONSE", XModule.Handle, 0, results.TablePtr);
-        //    //X.EXEC('CODE:ModuleIntf.SENDRESPONSE', X.MODULE, 0, RESULTS);
-        //    results.Current["STAGE"] = 4;
-        //}
         public override void BeforePost()
         {
             base.BeforePost();
@@ -524,9 +491,6 @@ namespace MothercareImportData
                         var execlog = softoneService.SetSimilarItems(differences, item_list);
                         logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                     }
-                    //logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου Όμοια Είδη ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
-                    //var execlog = softoneService.SetSimilarItems(similarItems, item_list);
-                    //logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                 }
                 //Barcode
                 logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου barcode ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;

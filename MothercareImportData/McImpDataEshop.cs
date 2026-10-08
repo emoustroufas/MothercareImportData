@@ -209,29 +209,6 @@ namespace MothercareImportData
                     var softOneAttributes = softoneService.GetSqlAttributeData();
                     var softOneProductAttributes = softoneService.GetSqlProductAttributeData();
                     var result = new List<ProductAttributeRecord>();
-                    //foreach (var excel in excelProductAttributes)
-                    //{
-                    //    var softOne = softOneProductAttributes.FirstOrDefault(x =>
-                    //        string.Equals(x.ProductCode, excel.ProductCode, StringComparison.OrdinalIgnoreCase) &&
-                    //        string.Equals(x.AttributeCode, excel.AttributeCode, StringComparison.OrdinalIgnoreCase) &&
-                    //        string.Equals(x.AttributeValueCode, excel.AttributeValueCode, StringComparison.OrdinalIgnoreCase) &&
-                    //        x.LanguageCode == excel.LanguageCode
-                    //    );
-                    //    // Δεν υπάρχει καθόλου στη βάση
-                    //    if (softOne == null)
-                    //    {
-                    //        result.Add(excel);
-                    //        continue;
-                    //    }
-                    //    // Υπάρχει αλλά έχει διαφορετική περιγραφή
-                    //    if (!string.Equals(
-                    //            softOne.FreeText?.Trim(),
-                    //            excel.FreeText?.Trim(),
-                    //            StringComparison.Ordinal))
-                    //    {
-                    //        result.Add(excel);
-                    //    }
-                    //}
                     var softOneLookup = softOneProductAttributes.ToLookup(x => string.Concat(
                         x.ProductCode?.Trim().ToUpperInvariant(), "|",
                         x.AttributeCode?.Trim().ToUpperInvariant(), "|",

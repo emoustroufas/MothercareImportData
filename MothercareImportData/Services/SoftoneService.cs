@@ -830,6 +830,11 @@ namespace MothercareImportData.Services
         }
         public string CreateUpdateItems(List<ItemMasterRecord> exceldata, List<SqlData> sqlData)
         {
+            var impparams = _xModule.GetTable("CCCVMCIMPPARAMS");
+            var defaultimagepath = impparams.Current["DEFAULTIMAGEPATH"] != DBNull.Value ? impparams.Current["DEFAULTIMAGEPATH"].ToString() : "";
+            var imageanalysis = impparams.Current["IMAGEANALYSIS"] != DBNull.Value ? Convert.ToInt32(impparams.Current["IMAGEANALYSIS"]) : 0;
+            var imageanalysistxt = _xSupport.GetXString("McImageAnalysis", (imageanalysis-1));
+            imageanalysistxt = imageanalysistxt.Split(new[] { '=' }, 2)[1];
             var logs_remarks = "";
             if (exceldata.Count > 0)
             {
@@ -1079,26 +1084,34 @@ namespace MothercareImportData.Services
                             var newId = ItemObj.PostData();
                             newId = newId < 0 ? mtrl : newId;
                             //Images
-                            if (item.ImagePath != "" && newId > 0)
+                            if (item.PhotoName != "" && newId > 0)
                             {
-                                var queryimage = $@"SELECT REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,SODATA,DEFXTRDOC,XDOCTYPE,SOMD FROM XTRDOCDATA 
-                                                    WHERE REFOBJID={newId} AND SOSOURCE = 51 AND LNUM=0 AND SOFNAME ='{item.ImagePath}' ";
-                                using (var ds = _xSupport.GetSQLDataSet(queryimage, null))
+                                var imagepath = "";
+                                if (defaultimagepath != "" && imageanalysistxt != "" && item.PhotoName != "")
                                 {
-                                    try
+                                    imagepath = defaultimagepath.Replace("XXXXXXXX", imageanalysistxt).Replace("ZZZZZZZZZ", item.PhotoName);
+                                }
+                                if (imagepath != "")
+                                {
+                                    var queryimage = $@"SELECT REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,SODATA,DEFXTRDOC,XDOCTYPE,SOMD FROM XTRDOCDATA 
+                                                    WHERE REFOBJID={newId} AND SOSOURCE = 51 AND LNUM=0 AND SOFNAME ='{imagepath}' ";
+                                    using (var ds = _xSupport.GetSQLDataSet(queryimage, null))
                                     {
-                                        if (ds.Count == 0)
+                                        try
                                         {
-                                            var execsql = "";
-                                            execsql = $"DELETE FROM XTRDOCDATA WHERE REFOBJID={newId} AND SOSOURCE = 51; ";
-                                            execsql = execsql + $@"INSERT INTO XTRDOCDATA (REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,NAME,SOFNAME,DEFXTRDOC,XDOCTYPE,SOMD) 
-                                                                    VALUES ({newId},51 ,0 ,1 ,0 ,'{item.PhotoName}','{item.ImagePath}' ,0 ,0 ,0); ";
-                                            _xSupport.ExecuteSQL(execsql);
+                                            if (ds.Count == 0)
+                                            {
+                                                var execsql = "";
+                                                execsql = $"DELETE FROM XTRDOCDATA WHERE REFOBJID={newId} AND SOSOURCE = 51 AND LNUM=0; ";
+                                                execsql = execsql + $@"INSERT INTO XTRDOCDATA (REFOBJID,SOSOURCE,LNUM,LINENUM,DBWHOUSED,NAME,SOFNAME,DEFXTRDOC,XDOCTYPE,SOMD) 
+                                                                    VALUES ({newId},51 ,0 ,1 ,0 ,'{item.PhotoName}','{imagepath}' ,0 ,0 ,0); ";
+                                                _xSupport.ExecuteSQL(execsql);
+                                            }
                                         }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        logs_remarks = logs_remarks + $"Πρόβλημα στην εικόνα «{item.PhotoName}» του είδους με Κωδικό «{item.Code}»." + ex.Message + Environment.NewLine;
+                                        catch (Exception ex)
+                                        {
+                                            logs_remarks = logs_remarks + $"Πρόβλημα στην εικόνα «{item.PhotoName}» του είδους με Κωδικό «{item.Code}»." + ex.Message + Environment.NewLine;
+                                        }
                                     }
                                 }
                             }
