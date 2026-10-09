@@ -887,6 +887,9 @@ namespace MothercareImportData.Services
                                 ItemObj.GetTable("MTRL").Current["CODE"] = "MC"+item.Code;
                                 ItemObj.GetTable("MTRL").Current["CCCMCOLDCODE"] = item.Code;
                                 ItemObj.GetTable("MTRL").Current["CCCITEMCOMPANY"] = 2; //0=Όλοι, 1=Dpam, 2=Mothercare
+                                ItemObj.GetTable("MTRL").Current["ITEQTY"] = 1;
+                                ItemObj.GetTable("MTRL").Current["PURQTY"] = 1;
+                                ItemObj.GetTable("MTRL").Current["SALQTY"] = 1;
                             }
                             else
                             {
@@ -898,11 +901,9 @@ namespace MothercareImportData.Services
                                 }
                             }
                             ItemObj.GetTable("MTRL").Current["NAME"] = item.Name;
-
                             ItemObj.GetTable("MTRL").Current["CODE2"] = item.TaxCode;
                             ItemObj.GetTable("MTRL").Current["CCCASSORTMENTDESCR"] = item.AssortmentDescription;
                             ItemObj.GetTable("MTRL").Current["CCCSUPPLIERCODE"] = item.SupplierCode;
-
                             ItemObj.GetTable("MTRL").Current["NAME1"] = item.EnglishDescription;
                             ItemObj.GetTable("MTRL").Current["REMARKS"] = item.Comments;
                             var mtrunit = 0;
@@ -1053,7 +1054,7 @@ namespace MothercareImportData.Services
                             {
                                 logs_remarks = logs_remarks + $"Ο Τύπος για λογιστική με Κωδικό «{item.AccountingType}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
                             }
-                            ItemObj.GetTable("MTREXTRA").Current["VARCHAR01"] = item.ImagePath;
+                            //ItemObj.GetTable("MTREXTRA").Current["VARCHAR01"] = item.ImagePath;
                             ItemObj.GetTable("MTREXTRA").Current["BOOL02"] = item.RestockWithPackage;
                             ItemObj.GetTable("MTRL").Current["CCCLIGUARANTYMONTHS"] = item.WarrantyMonths;
                             ItemObj.GetTable("MTRL").Current["CCCESHOPMASTERCODE"] = item.EshopMasterCode;
@@ -1061,7 +1062,10 @@ namespace MothercareImportData.Services
                             ItemObj.GetTable("MTRL").Current["CCCLENGTH"] = item.Length;
                             ItemObj.GetTable("MTRL").Current["CCCWIDTH"] = item.Width;
                             ItemObj.GetTable("MTRL").Current["VOLUME"] = item.ItemCubeM;
+
+                            ItemObj.GetTable("MTRL").Current["CCCPHOTONAME"] = item.PhotoName;
                             ItemObj.GetTable("MTREXTRA").Current["VARCHAR02"] = item.PhotoName;
+
                             ItemObj.GetTable("MTRL").Current["CCCWORKINPROGRESSINGR"] = item.WorkInProgressInGr;
                             ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINGR"] = item.ToBePublishedInGr;
                             ItemObj.GetTable("MTRL").Current["CCCTOBEUNPUBLISHEDINGR"] = item.ToBeUnpublishedInGr;
@@ -1069,6 +1073,7 @@ namespace MothercareImportData.Services
                             ItemObj.GetTable("MTRL").Current["CCCISPUBLISHEDINGR"] = item.IsPublishedInGr;
                             ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINSKROUTZ"] = item.ToBePublishedInSkroutz;
                             ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINPUBLIC"] = item.ToBePublishedInPublic;
+                            ItemObj.GetTable("MTRL").Current["CCCEXTENDEDCOLLECTION"] = item.ExtendedCollection;
                             ////if (data.eDescription != "")
                             ////{
                             ////    var htmldescription = "<html><head><meta http-equiv=" + "\"Content - Type\"" + " content =" + "\"text / html; charset = windows - 1253\"" + " ><title></title><style></style></head><body>" +
@@ -1715,6 +1720,125 @@ namespace MothercareImportData.Services
         //        throw new Exception(ex.Message);
         //    }
         //}
+        public List<VatPerCountry> GetSqlVatPerCountry()
+        {
+            var sqldata = new List<VatPerCountry>();
+            try
+            {
+                var query = $@"SELECT A.CCCVATPERCOUNTRY,C.INTERCODE AS CountryCode,
+											A.FROMDATE AS FromDate,
+											D.CODE AS Division,
+											DP.CODE AS Department,
+											SD.CODE AS Subdepartment,
+											CL.CODE AS Class,
+											S.ACNMSK AS Style,
+											A.PERC AS Perc
+											FROM CCCVATPERCOUNTRY A
+											LEFT JOIN COUNTRY C ON C.COUNTRY = A.COUNTRY 
+											LEFT JOIN CCCDIVISION D ON D.CCCDIVISION=A.DIVISION 
+											LEFT JOIN CCCDEPARTMENT DP ON DP.CCCDEPARTMENT=A.DEPT 
+											LEFT JOIN CCCSUBDEPT SD ON SD.CCCSUBDEPT = A.SUBDEPT 
+											LEFT JOIN CCCCLASS CL ON CL.CCCCLASS = A.CLASS 
+											LEFT JOIN MTRMANFCTR S ON S.MTRMANFCTR = A.STYLE ";
+                using (var ds = _xSupport.GetSQLDataSet(query, null))
+                {
+                    try
+                    {
+                        if (ds.Count > 0)
+                        {
+                            for (int i = 0; i < ds.Count; i++)
+                            {
+                                var res = new VatPerCountry
+                                {
+                                    SoftoneId= ds.GetAsInteger(i, "CCCVATPERCOUNTRY"),
+                                    CountryCode = ds.GetAsString(i, "CountryCode"),
+                                    FromDate = ds.GetAsDateTime(i, "FromDate"),
+                                    Division = ds.GetAsString(i, "Division"),
+                                    Department = ds.GetAsString(i, "Department"),
+                                    Subdepartment = ds.GetAsString(i, "Subdepartment"),
+                                    Class = ds.GetAsString(i, "Class"),
+                                    Style = ds.GetAsString(i, "Style"),
+                                    Perc = ds.GetAsFloat(i, "Perc"),
+                                };
+                                sqldata.Add(res);
+                            }
+                        }
+                        return sqldata;
+                    }
+                    catch (Exception ex)
+                    {
+                        return sqldata;
+                        throw new Exception(ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return sqldata;
+                throw new Exception(ex.Message);
+            }
+        }
+        public string SetVatPerCountry(List<VatPerCountry> exceldata, List<SqlData> sqlData)
+        {
+            var logs_remarks = "";
+            if (exceldata.Count() > 0)
+            {
+                ProgressNotify(1, 1); //Ξεκινά την μπάρα
+                MarkStage(1); //Γράφει στάδιο					
+                ProgressNotify(2, exceldata.Count); //Χωρίζει την μπάρα σε κομμάτια
+                var counter = 0;
+                var theme_list = sqlData.Where(x => x.Obj == "theme").ToList();
+                var division_list = sqlData.Where(x => x.Obj == "division").ToList();
+                var department_list = sqlData.Where(x => x.Obj == "department").ToList();
+                var subdepartment_list = sqlData.Where(x => x.Obj == "subdept").ToList();
+                var class_list = sqlData.Where(x => x.Obj == "class").ToList();
+                var country_list = sqlData.Where(x => x.Obj == "country").ToList();
+                foreach (var exd in exceldata)
+                {
+                    counter++;
+                    ProgressNotify(3, counter);//Γράφει την πρόοδο στην μπάρα
+                    try
+                    {
+                        var divisionId = division_list.Where(x => x.Code.Trim() == exd.Division.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                        var departmentId = department_list.Where(x => x.Code.Trim() == exd.Department.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                        var subdeptId = subdepartment_list.Where(x => x.Code.Trim() == exd.Department.ToString().Trim() + "-" + exd.Subdepartment.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                        var classId = class_list.Where(x => x.Code.Trim() == exd.Department.ToString().Trim() + "-" + exd.Subdepartment.ToString().Trim() + "-" + exd.Class.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                        var mtrmanufacturerId = theme_list.Where(x => x.Name.Trim() == exd.Style.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                        var countryId = country_list.Where(x => x.Code.Trim() == exd.CountryCode.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+
+                        using (var ImpObj = _xSupport.CreateModule("CCCVATPERCOUNTRY"))
+                        {
+                            ImpObj.InsertData();
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["COUNTRY"] = countryId;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["FROMDATE"] = exd.FromDate;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["DIVISION"] = divisionId;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["DEPT"] = departmentId;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["SUBDEPT"] = subdeptId;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["CLASS"] = classId;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["STYLE"] = mtrmanufacturerId;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["PERC"] = exd.Perc;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["INSDATE"] = DateTime.Now;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["INSUSER"] = _xSupport.ConnectionInfo.UserId;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["UPDDATE"] = DateTime.Now;
+                            ImpObj.GetTable("CCCVATPERCOUNTRY").Current["UPDUSER"] = _xSupport.ConnectionInfo.UserId;
+                            ImpObj.PostData();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logs_remarks = logs_remarks + $"Πρόβλημα στη ΦΠΑ ανά χώρα ,στην χώρα «{exd.CountryCode} , από {exd.FromDate}, στο Division {exd.Division}, στο Subdepartment {exd.Subdepartment}, στο Class {exd.Class}, στο Style {exd.Style}»." + ex.Message + Environment.NewLine;
+                    }
+                }
+                
+                MarkStage(2);
+                MarkStage(3);
+                MarkStage(0);
+                ProgressNotify(0, 0);   //Σβήνει την μπάρα						 
+                var resultsprocess = "result1,result2,result3";
+                _xModule.Exec("CODE:ModuleIntf.SENDRESPONSE", _xModule.Handle, 1, 0, resultsprocess); //Εμφανίζει αποτέλεσμα
+            }
+            return logs_remarks;
+        }
         public string CreateUpdateAttributes(List<AttributeRecord> attributes)
         {
             var logs_remarks = "";

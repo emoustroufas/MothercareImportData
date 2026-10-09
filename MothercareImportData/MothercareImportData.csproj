@@ -145,6 +145,7 @@
     <Compile Include="Models\SupBarcodeRecord.cs" />
     <Compile Include="Models\TagRecord.cs" />
     <Compile Include="Models\UnitOfMeasureRecord.cs" />
+    <Compile Include="Models\VatPerCountry.cs" />
     <Compile Include="S1Init.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\ExcelEditor.cs" />

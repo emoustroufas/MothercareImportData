@@ -65,22 +65,23 @@ namespace MothercareImportData.Services
                         item.Bu = FileUtil.InBounds(34, row.Columns) ? (row.Columns.Count > 34 ? row.Columns[34] : "") : "";
                         item.ItemType = Convert.ToInt32(FileUtil.InBounds(35, row.Columns) ? (row.Columns.Count > 35 ? (row.Columns[35] != "" ? row.Columns[35] : "0") : "0") : "0");
                         item.AccountingType = FileUtil.InBounds(36, row.Columns) ? (row.Columns.Count > 36 ? row.Columns[36] : "") : "";
-                        item.ImagePath = FileUtil.InBounds(37, row.Columns) ? (row.Columns.Count > 37 ? row.Columns[37] : "") : "";
-                        item.RestockWithPackage = Convert.ToInt32(FileUtil.InBounds(38, row.Columns) ? (row.Columns.Count > 38 ? (row.Columns[38] != "" ? row.Columns[38] : "0") : "0") : "0");
-                        item.WarrantyMonths = Convert.ToInt32(FileUtil.InBounds(39, row.Columns) ? (row.Columns.Count > 39 ? (row.Columns[39] != "" ? row.Columns[39] : "0") : "0") : "0");
-                        item.EshopMasterCode = FileUtil.InBounds(40, row.Columns) ? (row.Columns.Count > 40 ? row.Columns[40] : "") : "";
-                        item.Height = Convert.ToDouble(FileUtil.InBounds(41, row.Columns) ? (row.Columns.Count > 41 ? (row.Columns[41] != "" ? row.Columns[41] : "0.0") : "0.0") : "0.0");
-                        item.Length = Convert.ToDouble(FileUtil.InBounds(42, row.Columns) ? (row.Columns.Count > 42 ? (row.Columns[42] != "" ? row.Columns[42] : "0.0") : "0.0") : "0.0");
-                        item.Width = Convert.ToDouble(FileUtil.InBounds(43, row.Columns) ? (row.Columns.Count > 43 ? (row.Columns[43] != "" ? row.Columns[43] : "0.0") : "0.0") : "0.0");
-                        item.ItemCubeM = Convert.ToDouble(FileUtil.InBounds(44, row.Columns) ? (row.Columns.Count > 44 ? (row.Columns[44] != "" ? row.Columns[44] : "0.0") : "0.0") : "0.0");
-                        item.PhotoName = FileUtil.InBounds(45, row.Columns) ? (row.Columns.Count > 45 ? row.Columns[45] : "") : "";
+                        //item.ImagePath = FileUtil.InBounds(37, row.Columns) ? (row.Columns.Count > 37 ? row.Columns[37] : "") : "";
+                        item.RestockWithPackage = Convert.ToInt32(FileUtil.InBounds(37, row.Columns) ? (row.Columns.Count > 37 ? (row.Columns[37] != "" ? row.Columns[37] : "0") : "0") : "0");
+                        item.WarrantyMonths = Convert.ToInt32(FileUtil.InBounds(38, row.Columns) ? (row.Columns.Count > 38 ? (row.Columns[38] != "" ? row.Columns[38] : "0") : "0") : "0");
+                        item.EshopMasterCode = FileUtil.InBounds(39, row.Columns) ? (row.Columns.Count > 39 ? row.Columns[39] : "") : "";
+                        item.Height = Convert.ToDouble(FileUtil.InBounds(40, row.Columns) ? (row.Columns.Count > 40 ? (row.Columns[40] != "" ? row.Columns[40] : "0.0") : "0.0") : "0.0");
+                        item.Length = Convert.ToDouble(FileUtil.InBounds(41, row.Columns) ? (row.Columns.Count > 41 ? (row.Columns[41] != "" ? row.Columns[41] : "0.0") : "0.0") : "0.0");
+                        item.Width = Convert.ToDouble(FileUtil.InBounds(42, row.Columns) ? (row.Columns.Count > 42 ? (row.Columns[42] != "" ? row.Columns[42] : "0.0") : "0.0") : "0.0");
+                        item.ItemCubeM = Convert.ToDouble(FileUtil.InBounds(43, row.Columns) ? (row.Columns.Count > 43 ? (row.Columns[43] != "" ? row.Columns[43] : "0.0") : "0.0") : "0.0");
+                        item.PhotoName = FileUtil.InBounds(44, row.Columns) ? (row.Columns.Count > 44 ? row.Columns[44] : "") : "";
+                        item.ExtendedCollection = Convert.ToInt32(FileUtil.InBounds(45, row.Columns) ? (row.Columns.Count > 45 ? row.Columns[45] : "0") : "0");
                         item.WorkInProgressInGr = Convert.ToInt32(FileUtil.InBounds(46, row.Columns) ? (row.Columns.Count > 46 ? row.Columns[46] : "0") : "0");
                         item.ToBePublishedInGr = Convert.ToInt32(FileUtil.InBounds(47, row.Columns) ? (row.Columns.Count > 47 ? row.Columns[47] : "0") : "0");
-                        item.ToBeUnpublishedInGr = Convert.ToInt32(FileUtil.InBounds(48, row.Columns) ? (row.Columns.Count > 48 ? row.Columns[48] : "0") : "0");
-                        item.HasTranslation = Convert.ToInt32(FileUtil.InBounds(49, row.Columns) ? (row.Columns.Count > 49 ? row.Columns[49] : "0") : "0");
-                        item.IsPublishedInGr = Convert.ToInt32(FileUtil.InBounds(50, row.Columns) ? (row.Columns.Count > 50 ? row.Columns[50] : "0") : "0");
-                        item.ToBePublishedInSkroutz = Convert.ToInt32(FileUtil.InBounds(51, row.Columns) ? (row.Columns.Count > 51 ? row.Columns[51] : "0") : "0");
-                        item.ToBePublishedInPublic = Convert.ToInt32(FileUtil.InBounds(52, row.Columns) ? (row.Columns.Count > 52 ? row.Columns[52] : "0") : "0");
+                        //item.ToBeUnpublishedInGr = Convert.ToInt32(FileUtil.InBounds(48, row.Columns) ? (row.Columns.Count > 48 ? row.Columns[48] : "0") : "0");
+                        item.HasTranslation = Convert.ToInt32(FileUtil.InBounds(48, row.Columns) ? (row.Columns.Count > 48 ? row.Columns[48] : "0") : "0");
+                        item.IsPublishedInGr = Convert.ToInt32(FileUtil.InBounds(49, row.Columns) ? (row.Columns.Count > 49 ? row.Columns[49] : "0") : "0");
+                        item.ToBePublishedInSkroutz = Convert.ToInt32(FileUtil.InBounds(50, row.Columns) ? (row.Columns.Count > 50 ? row.Columns[50] : "0") : "0");
+                        item.ToBePublishedInPublic = Convert.ToInt32(FileUtil.InBounds(51, row.Columns) ? (row.Columns.Count > 51 ? row.Columns[51] : "0") : "0");
                         result.Add((T)(object)item);
                     }
                     i++;
@@ -578,6 +579,35 @@ namespace MothercareImportData.Services
                     }
                 }
                 result.AddRange((IEnumerable<T>)nidRecords);
+            }
+            else if (typeof(T) == typeof(VatPerCountry))
+            { 
+                List<VatPerCountry> vatPerCountries = new List<VatPerCountry>();
+                foreach (var row in rows)
+                {
+                    var countryCode = FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "") : "";
+                    var fromDate = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? (DateTime?)Convert.ToDateTime(row.Columns[1]) : null) : null;
+                    var division = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? row.Columns[2] : "") : "";
+                    var department = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? row.Columns[3] : "") : "";
+                    var subdepartment = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? row.Columns[4] : "") : "";
+                    var classCode = FileUtil.InBounds(5, row.Columns) ? (row.Columns.Count > 5 ? row.Columns[5] : "") : "";
+                    var style = FileUtil.InBounds(6, row.Columns) ? (row.Columns.Count > 6 ? row.Columns[6] : "") : "";
+                    var perc = Convert.ToDouble(FileUtil.InBounds(7, row.Columns) ? (row.Columns.Count > 7 ? (row.Columns[7] != "" ? row.Columns[7] : "0.0") : "0.0") : "0.0");
+                    // Δημιουργούμε το VatPerCountry
+                    VatPerCountry vatPerCountry = new VatPerCountry
+                    {
+                        CountryCode = countryCode,
+                        FromDate = fromDate ?? DateTime.MinValue,
+                        Division = division,
+                        Department = department,
+                        Subdepartment = subdepartment,
+                        Class = classCode,
+                        Style = style,
+                        Perc = perc
+                    };
+                    vatPerCountries.Add(vatPerCountry);
+                }
+                result.AddRange((IEnumerable<T>)vatPerCountries);
             }
             return result;
         }

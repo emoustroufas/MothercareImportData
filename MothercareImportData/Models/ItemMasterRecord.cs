@@ -61,5 +61,6 @@ namespace MothercareImportData.Models
         public int IsPublishedInGr { get; set; } //IS_PUBLISHED_IN_GR
         public int ToBePublishedInSkroutz { get; set; } //TO_BE_PUBLISHED_IN_SKROUTZ
         public int ToBePublishedInPublic { get; set; } //TO_BE_PUBLISHED_IN_PUBLIC
+        public int ExtendedCollection { get; set; } //Διευρυμένη Συλλογή
     }
 }

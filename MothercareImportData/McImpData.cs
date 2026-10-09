@@ -418,7 +418,7 @@ namespace MothercareImportData
                     excelData.RemoveRange(0, numLinesToRemove);
                 }
                 items = ExcelFileService.GetExcelData<ItemMasterRecord>(excelData, firstLineInUse);
-                //items = items.Where(x => x.ItemType == 1).ToList();//ΕΜΠΟΡΕΥΜΑ
+                items = items.Where(x => x.ItemType == 1 || x.ItemType == 14).ToList();//ΕΜΠΟΡΕΥΜΑ, SET
                 if (items.Count > 0)
                 {
                     var newdata = false;
@@ -459,6 +459,30 @@ namespace MothercareImportData
                 sqlData = softoneService.GetSqlData();
                 item_list = sqlData.Where(x => x.Obj == "item").ToList();
 
+                //EU SALES
+                logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου EU SALES ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                excelData = excelClient.ExportExcelData("EU SALES");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                var vatPerCountries = ExcelFileService.GetExcelData<VatPerCountry>(excelData, firstLineInUse);
+                if (vatPerCountries.Count > 0)
+                {
+                    var softoneVatPerCountries = softoneService.GetSqlVatPerCountry();
+                    var differences = vatPerCountries.Where(d => !softoneVatPerCountries.Any(s => s.CountryCode == d.CountryCode
+                    && s.Division == d.Division
+                    && s.Department == d.Department
+                    && s.Subdepartment == d.Subdepartment
+                    && s.Class == d.Class
+                    && s.Style == d.Style)).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου EU SALES ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.SetVatPerCountry(differences, sqlData);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
                 //Barcode Προμηθευτών
                 logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Barcode Προμηθευτών ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 excelData = excelClient.ExportExcelData("barcode προμηθευτών");
