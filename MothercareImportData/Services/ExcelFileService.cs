@@ -74,7 +74,7 @@ namespace MothercareImportData.Services
                         item.Width = Convert.ToDouble(FileUtil.InBounds(41, row.Columns) ? (row.Columns.Count > 41 ? (row.Columns[41] != "" ? row.Columns[41] : "0.0") : "0.0") : "0.0");
                         item.ItemCubeM = Convert.ToDouble(FileUtil.InBounds(42, row.Columns) ? (row.Columns.Count > 42 ? (row.Columns[42] != "" ? row.Columns[42] : "0.0") : "0.0") : "0.0");
                         item.PhotoName = FileUtil.InBounds(43, row.Columns) ? (row.Columns.Count > 43 ? row.Columns[43] : "") : "";
-                        item.ExtendedCollection = Convert.ToInt32(FileUtil.InBounds(44, row.Columns) ? (row.Columns.Count > 44 ? row.Columns[44] : "0") : "0");
+                        item.ExtendedCollection = Convert.ToInt32(FileUtil.InBounds(44, row.Columns) ? (row.Columns.Count > 44 ? (row.Columns[44] !="" ? row.Columns[44] : "0") : "0") : "0");
                         item.WorkInProgressInGr = Convert.ToInt32(FileUtil.InBounds(45, row.Columns) ? (row.Columns.Count > 45 ? row.Columns[45] : "0") : "0");
                         item.ToBePublishedInGr = Convert.ToInt32(FileUtil.InBounds(46, row.Columns) ? (row.Columns.Count > 46 ? row.Columns[46] : "0") : "0");
                         //item.ToBeUnpublishedInGr = Convert.ToInt32(FileUtil.InBounds(47, row.Columns) ? (row.Columns.Count > 47 ? row.Columns[47] : "0") : "0");

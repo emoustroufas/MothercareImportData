@@ -868,6 +868,9 @@ namespace MothercareImportData.Services
 
                 using (var ItemObj = _xSupport.CreateModule("ITEM;Items Mothercare"))
                 {
+                    _xSupport.CallPublished(_xSupport.GetStockObj("ModuleIntf", true), "SetParamValue", new object[] { ItemObj.Handle, "WARNINGS", "OFF" });
+                    _xSupport.CallPublished(_xSupport.GetStockObj("ModuleIntf", true), "SetParamValue", new object[] { ItemObj.Handle, "NOMESSAGES", "1" });
+
                     foreach (var item in exceldata)
                     {
                         counter++;
@@ -1048,9 +1051,9 @@ namespace MothercareImportData.Services
                             {
                                 logs_remarks = logs_remarks + $"Ο Τύπος Είδους με Κωδικό «{item.ItemType}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
                             }
-                            var accountingtypeId = accountingtype_list.Where(x => x.Code.Trim() == "MC" + item.AccountingType.ToString().Trim()).FirstOrDefault()?.Id ?? null;
+                            var accountingtypeId = accountingtype_list.Where(x => x.Code.Trim() == "MC" + (item.AccountingType ?? "").ToString().Trim()).FirstOrDefault()?.Id ?? null;
                             ItemObj.GetTable("MTRL").Current["MTRACN"] = accountingtypeId;
-                            if (item.AccountingType.ToString() != "" && accountingtypeId == null)
+                            if ((item.AccountingType ?? "").ToString() != "" && accountingtypeId == null)
                             {
                                 logs_remarks = logs_remarks + $"Ο Τύπος για λογιστική με Κωδικό «{item.AccountingType}» δεν υπάρχει στο Softone για το είδος με κωδικό «  {item.Code}  »." + Environment.NewLine;
                             }
@@ -1068,7 +1071,7 @@ namespace MothercareImportData.Services
 
                             ItemObj.GetTable("MTRL").Current["CCCWORKINPROGRESSINGR"] = item.WorkInProgressInGr;
                             ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINGR"] = item.ToBePublishedInGr;
-                            ItemObj.GetTable("MTRL").Current["CCCTOBEUNPUBLISHEDINGR"] = item.ToBeUnpublishedInGr;
+                            //ItemObj.GetTable("MTRL").Current["CCCTOBEUNPUBLISHEDINGR"] = item.ToBeUnpublishedInGr;
                             ItemObj.GetTable("MTRL").Current["CCCHASTRANSLATION"] = item.HasTranslation;
                             ItemObj.GetTable("MTRL").Current["CCCISPUBLISHEDINGR"] = item.IsPublishedInGr;
                             ItemObj.GetTable("MTRL").Current["CCCTOBEPUBLISHEDINSKROUTZ"] = item.ToBePublishedInSkroutz;
