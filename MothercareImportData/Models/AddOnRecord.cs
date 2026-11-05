@@ -15,6 +15,13 @@ namespace MothercareImportData.Models
     public class AddOnGroup
     {
         public string ItemCode { get; set; }
-        public List<string> AddOnItemCodes { get; set; }
+        public List<AddOnChange> AddOns { get; set; }
+        //public List<string> AddOnItemCodes { get; set; }
+    }
+    public class AddOnChange
+    {
+        public string ItemCode { get; set; }
+        public string AddOnItemCode { get; set; }
+        public string Action { get; set; }
     }
 }

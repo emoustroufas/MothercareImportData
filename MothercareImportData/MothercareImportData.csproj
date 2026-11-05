@@ -113,11 +113,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="McECategory.cs" />
     <Compile Include="McImpData.cs" />
     <Compile Include="McImpDataEshop.cs" />
     <Compile Include="Models\AccountingTypeRecord.cs" />
     <Compile Include="Models\AddOnRecord.cs" />
     <Compile Include="Models\AttributeRecord.cs" />
+    <Compile Include="Models\CategoriesData.cs" />
     <Compile Include="Models\CoreResult.cs" />
     <Compile Include="Models\ItemTextsRecord.cs" />
     <Compile Include="Models\NidRecord.cs" />
@@ -135,10 +137,12 @@
     <Compile Include="Models\ItemMasterRecord.cs" />
     <Compile Include="Models\ItemTypeRecord.cs" />
     <Compile Include="Models\LiRow.cs" />
+    <Compile Include="Models\RecommendedForRecord.cs" />
     <Compile Include="Models\SeasonalityRecord.cs" />
     <Compile Include="Models\SimilarItemRecord.cs" />
     <Compile Include="Models\SizeGuideRecord.cs" />
     <Compile Include="Models\SizeRecord.cs" />
+    <Compile Include="Models\SqlCategoryData.cs" />
     <Compile Include="Models\SqlData.cs" />
     <Compile Include="Models\StatusRecord.cs" />
     <Compile Include="Models\SubdepartmentRecord.cs" />

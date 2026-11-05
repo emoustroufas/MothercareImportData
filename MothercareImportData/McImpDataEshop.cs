@@ -2,6 +2,7 @@
 using MothercareImportData.Services;
 using Softone;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -24,6 +25,9 @@ namespace MothercareImportData
         private List<ProductAttributeRecord> excelProductAttributes;
         private List<ItemTextsRecord> texts;
         private List<NidRecord> nids;
+        private List<RecommendedForRecord> recommendedfor;
+        private List<CategoriesData> categories;
+        private List<CategoriesPerProduct> categoriesPerProduct;
         public override void Initialize()
         {
             XModule.SetEvent("ON_CCCVMCIMPPARAMS_PATH", On_CccVMCImpParams_Path);
@@ -197,6 +201,128 @@ namespace MothercareImportData
                     }
                 }
                 //Attributes per product
+                logs_remarks += $"Ανάγνωση Αρχείου Attributes Per Product ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + Environment.NewLine;
+                excelData = excelClient.ExportExcelData("attributes per product");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                excelProductAttributes = ExcelFileService.GetExcelData<ProductAttributeRecord>(excelData, firstLineInUse);
+                if (excelProductAttributes.Count > 0)
+                {
+                    var softOneAttributes = softoneService.GetSqlAttributeData();
+                    var softOneProductAttributes = softoneService.GetSqlProductAttributeData();
+                    var result = new List<ProductAttributeRecord>();
+                    var deleteRecords = new List<ProductAttributeDeleteRecord>();
+                    // ==================================================
+                    // 1. EXCEL LOOKUPS
+                    // ==================================================
+                    // Excel: Product + Attribute + Value + Language
+                    var excelLookup = excelProductAttributes.ToLookup(x => string.Join("|", (x.ProductCode ?? "").Trim(), (x.AttributeCode ?? "").Trim(), (x.AttributeValueCode ?? "").Trim(), x.LanguageCode), StringComparer.OrdinalIgnoreCase);
+                    // Excel: Products
+                    var excelProducts = new HashSet<string>(excelProductAttributes.Select(x => (x.ProductCode ?? "").Trim()), StringComparer.OrdinalIgnoreCase);
+                    // Excel: Product + Attribute
+                    var excelAttributeKeys = new HashSet<string>(excelProductAttributes.Select(x => string.Join("|", (x.ProductCode ?? "").Trim(), (x.AttributeCode ?? "").Trim())), StringComparer.OrdinalIgnoreCase);
+                    // Excel: Product + Attribute + Language
+                    // Μόνο εγγραφές με περιγραφή
+                    var excelTranslationKeys = new HashSet<string>(excelProductAttributes.
+                        //Where(x => !string.IsNullOrWhiteSpace(x.FreeText)).
+                        Select(x => string.Join("|", (x.ProductCode ?? "").Trim(), (x.AttributeCode ?? "").Trim(), x.LanguageCode)), StringComparer.OrdinalIgnoreCase);
+                    // ==================================================
+                    // 2. DATABASE LOOKUP
+                    // ==================================================
+                    var softOneLookup = softOneProductAttributes.ToLookup(x => string.Join("|", (x.ProductCode ?? "").Trim(), (x.AttributeCode ?? "").Trim(), (x.AttributeValueCode ?? "").Trim(), x.LanguageCode), StringComparer.OrdinalIgnoreCase);
+                    // ==================================================
+                    // 3. INSERT / UPDATE COMPARISON
+                    // ==================================================
+                    foreach (var excel in excelProductAttributes)
+                    {
+                        string key = string.Join("|", (excel.ProductCode ?? "").Trim(), (excel.AttributeCode ?? "").Trim(), (excel.AttributeValueCode ?? "").Trim(), excel.LanguageCode);
+                        var softOne = softOneLookup[key].FirstOrDefault();
+                        // Δεν υπάρχει στη βάση -> INSERT
+                        if (softOne == null)
+                        {
+                            result.Add(excel);
+                            continue;
+                        }
+                        // Υπάρχει αλλά έχει διαφορετική περιγραφή -> UPDATE
+                        if (!string.Equals(softOne.FreeText?.Trim(), excel.FreeText?.Trim(), StringComparison.Ordinal))
+                        {
+                            result.Add(excel);
+                        }
+                    }
+                    // ==================================================
+                    // 4. DELETE COMPARISON
+                    // ==================================================
+                    // HashSet για αποφυγή διπλών διαγραφών
+                    var deletedAttributeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var deletedTranslationKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var delcounter = 0;
+                    foreach (var dbAttribute in softOneProductAttributes)
+                    {
+                        delcounter++;
+                        string productCode = (dbAttribute.ProductCode ?? "").Trim();
+                        string attributeCode = (dbAttribute.AttributeCode ?? "").Trim();
+                        // Ελέγχουμε μόνο προϊόντα που υπάρχουν στο Excel
+                        if (!excelProducts.Contains(productCode))
+                            continue;
+                        string attributeKey = string.Join("|", productCode, attributeCode);
+                        // ----------------------------------------------
+                        // DELETE ΟΛΟΚΛΗΡΟΥ ATTRIBUTE
+                        // ----------------------------------------------
+                        if (!excelAttributeKeys.Contains(attributeKey))
+                        {
+                            if (deletedAttributeKeys.Add(attributeKey))
+                            {
+                                deleteRecords.Add(new ProductAttributeDeleteRecord
+                                {
+                                    ProductCode = productCode,
+                                    AttributeCode = attributeCode,
+                                    DeleteAttribute = true
+                                });
+                            }
+                            continue;
+                        }
+                        // ----------------------------------------------
+                        // DELETE ΜΟΝΟ ΤΗΣ ΜΕΤΑΦΡΑΣΗΣ
+                        // ----------------------------------------------
+                        string translationKey = string.Join("|", productCode, attributeCode, dbAttribute.LanguageCode);
+                        if (!excelTranslationKeys.Contains(translationKey) && dbAttribute.FreeText !="")
+                        {
+                            if (deletedTranslationKeys.Add(translationKey))
+                            {
+                                deleteRecords.Add(new ProductAttributeDeleteRecord
+                                {
+                                    ProductCode = productCode,
+                                    AttributeCode = attributeCode,
+                                    LanguageCode = dbAttribute.LanguageCode,
+                                    DeleteAttribute = false
+                                });
+                            }
+                        }
+                    }
+                    // ==================================================
+                    // 5. EXECUTE INSERT / UPDATE
+                    // ==================================================
+                    if (result.Count > 0)
+                    {
+                        logs_remarks += $"Εισαγωγή / Ενημέρωση Attributes Per Product ({result.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + Environment.NewLine;
+                        var execlog = softoneService.CreateUpdateProductAttributesNew(result, sqlData, softOneAttributes);
+                        logs_remarks += execlog + Environment.NewLine;
+                    }
+                    // ==================================================
+                    // 6. EXECUTE DELETE
+                    // ==================================================
+                    if (deleteRecords.Count > 0)
+                    {
+                        int deleteAttributes = deleteRecords.Count(x => x.DeleteAttribute);
+                        int deleteTranslations = deleteRecords.Count - deleteAttributes;
+                        logs_remarks += $"Διαγραφή Attributes Per Product ({deleteAttributes} Attributes, {deleteTranslations} μεταφράσεις) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + Environment.NewLine;
+                        var execlog = softoneService.DeleteProductAttributes(deleteRecords, sqlData, softOneAttributes);
+                        logs_remarks += execlog + Environment.NewLine;
+                    }
+                }
+                /*
                 logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Attributes Per Product ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 excelData = excelClient.ExportExcelData("attributes per product");
                 if (excelData.Count > 0)
@@ -238,6 +364,66 @@ namespace MothercareImportData
                             result.Add(excel);
                         }
                     }
+                    //DELETE DATA
+                    var deleteRecords =new List<ProductAttributeDeleteRecord>();
+                    var excelProducts = new HashSet<string>(excelProductAttributes.Select(x => (x.ProductCode ?? "").Trim()), StringComparer.OrdinalIgnoreCase);
+                    var excelAttributeKeys = new HashSet<string>(excelProductAttributes.Select(x => string.Concat((x.ProductCode ?? "").Trim(), "|", (x.AttributeCode ?? "").Trim())), StringComparer.OrdinalIgnoreCase);
+                    var excelTranslationKeys = new HashSet<string>(excelProductAttributes.Where(x => !string.IsNullOrWhiteSpace(x.FreeText)).
+                        Select(x => string.Concat((x.ProductCode ?? "").Trim(), "|", (x.AttributeCode ?? "").Trim(), "|", x.LanguageCode)), StringComparer.OrdinalIgnoreCase);
+                    var delcounter = 0;
+                    foreach (var dbAttribute in softOneProductAttributes)
+                    {
+                        delcounter++;
+                        string productCode = (dbAttribute.ProductCode ?? "").Trim();
+                        string attributeCode = (dbAttribute.AttributeCode ?? "").Trim();
+                        // Ελέγχουμε μόνο προϊόντα που υπάρχουν στο Excel
+                        if (!excelProducts.Contains(productCode))
+                            continue;
+                        string attributeKey = string.Concat(productCode, "|", attributeCode);
+                        // ============================================
+                        // DELETE ΟΛΟΚΛΗΡΟΥ ATTRIBUTE
+                        // ============================================
+                        if (!excelAttributeKeys.Contains(attributeKey))
+                        {
+                            // Αποφεύγουμε διπλές εγγραφές διαγραφής
+                            bool alreadyExists = deleteRecords.Any(x => x.DeleteAttribute &&
+                                string.Equals(x.ProductCode, productCode, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(x.AttributeCode, attributeCode, StringComparison.OrdinalIgnoreCase));
+                            if (!alreadyExists)
+                            {
+                                deleteRecords.Add(new ProductAttributeDeleteRecord
+                                {
+                                    ProductCode = productCode,
+                                    AttributeCode = attributeCode,
+                                    DeleteAttribute = true
+                                });
+                            }
+                            continue;
+                        }
+                        // ============================================
+                        // DELETE ΜΟΝΟ ΤΗΣ ΜΕΤΑΦΡΑΣΗΣ
+                        // ============================================
+                        string translationKey = string.Concat(productCode, "|", attributeCode, "|", dbAttribute.LanguageCode);
+                        if (!excelTranslationKeys.Contains(translationKey))
+                        {
+                            bool alreadyExists = deleteRecords.Any(x =>
+                                !x.DeleteAttribute &&
+                                string.Equals(x.ProductCode, productCode, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(x.AttributeCode, attributeCode, StringComparison.OrdinalIgnoreCase)
+                                && x.LanguageCode == dbAttribute.LanguageCode
+                                );
+                            if (!alreadyExists)
+                            {
+                                deleteRecords.Add(new ProductAttributeDeleteRecord
+                                {
+                                    ProductCode = productCode,
+                                    AttributeCode = attributeCode,
+                                    LanguageCode = dbAttribute.LanguageCode,
+                                    DeleteAttribute = false
+                                });
+                            }
+                        }
+                    }
                     if (result.Count > 0)
                     {
                         logs_remarks = logs_remarks + $"Εισαγωγή Attributes Per Product ({result.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
@@ -245,7 +431,14 @@ namespace MothercareImportData
                             //softoneService.CreateUpdateProductAttributes(result, sqlData, softOneAttributes);
                         logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                     }
+                    if (deleteRecords.Count > 0)
+                    { 
+                        logs_remarks = logs_remarks + $"Διαγραφή Attributes Per Product ({result.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.DeleteProductAttributes(deleteRecords, sqlData, softOneAttributes);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
                 }
+                */
                 //AddOns
                 logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Add Ons ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
                 excelData = excelClient.ExportExcelData("add ons");
@@ -254,15 +447,77 @@ namespace MothercareImportData
                     excelData.RemoveRange(0, numLinesToRemove);
                 }
                 addOns = ExcelFileService.GetExcelData<AddOnRecord>(excelData, firstLineInUse);
+                //if (addOns.Count > 0)
+                //{
+                //    var softOneAddOns = softoneService.GetSqlAddOns();
+                //    var differences = addOns.Where(d => !softOneAddOns.Any(s => s.ItemCode.Trim() == d.ItemCode.Trim() && s.AddOnItemCode.Trim() == d.AddOnItemCode.Trim())).ToList();
+                //    if (differences.Count > 0)
+                //    {
+                //        logs_remarks = logs_remarks + $"Εισαγωγή Add Ons ({addOns.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                //        var execlog = softoneService.SetAddOns(differences, item_list);
+                //        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                //    }
+                //}
                 if (addOns.Count > 0)
                 {
                     var softOneAddOns = softoneService.GetSqlAddOns();
-                    var differences = addOns.Where(d => !softOneAddOns.Any(s => s.ItemCode.Trim() == d.ItemCode.Trim() && s.AddOnItemCode.Trim() == d.AddOnItemCode.Trim())).ToList();
+                    var differences = new List<AddOnChange>();
+                    // Excel: ItemCode -> AddOnItemCode
+                    var excelGroups = addOns.GroupBy(x => (x.ItemCode ?? "").Trim(),StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(
+                            g => g.Key,
+                            g => new HashSet<string>(g.Select(x =>$"{(x.AddOnItemCode ?? "").Trim()}"),StringComparer.OrdinalIgnoreCase),StringComparer.OrdinalIgnoreCase);
+                    // Database: ItemCode -> AddOnItemCode 
+                    var dbGroups = softOneAddOns.GroupBy(x => (x.ItemCode ?? "").Trim(),StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(
+                            g => g.Key,
+                            g => new HashSet<string>(g.Select(x =>$"{(x.AddOnItemCode ?? "").Trim()}"),StringComparer.OrdinalIgnoreCase),StringComparer.OrdinalIgnoreCase);
+                    // Ελέγχουμε όλα τα προϊόντα που υπάρχουν στο Excel
+                    foreach (var excelItem in excelGroups)
+                    {
+                        string itemCode = excelItem.Key;
+                        var excelAddOns = excelItem.Value;
+                        HashSet<string> dbAddOns;
+                        if (!dbGroups.TryGetValue(itemCode, out dbAddOns))
+                        {
+                            dbAddOns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        }
+                        // INSERT: Υπάρχει στο Excel, αλλά όχι στη βάση
+                        foreach (var excelAddOn in addOns.Where(x =>
+                            (x.ItemCode ?? "").Trim().Equals(
+                                itemCode, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            string key =$"{(excelAddOn.AddOnItemCode ?? "").Trim()}";
+                            if (!dbAddOns.Contains(key))
+                            {
+                                differences.Add(new AddOnChange
+                                {
+                                    ItemCode = itemCode,
+                                    AddOnItemCode = excelAddOn.AddOnItemCode,
+                                    Action = "INSERT"
+                                });
+                            }
+                        }
+                        // DELETE: Υπάρχει στη βάση, αλλά όχι στο Excel
+                        foreach (var dbAddOn in softOneAddOns.Where(x =>(x.ItemCode ?? "").Trim().Equals(itemCode, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            string key =$"{(dbAddOn.AddOnItemCode ?? "").Trim()}";
+                            if (!excelAddOns.Contains(key))
+                            {
+                                differences.Add(new AddOnChange
+                                {
+                                    ItemCode = itemCode,
+                                    AddOnItemCode = dbAddOn.AddOnItemCode,
+                                    Action = "DELETE"
+                                });
+                            }
+                        }
+                    }
                     if (differences.Count > 0)
                     {
-                        logs_remarks = logs_remarks + $"Εισαγωγή Add Ons ({addOns.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        logs_remarks += $"Συγχρονισμός Add Ons ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})"+ Environment.NewLine;
                         var execlog = softoneService.SetAddOns(differences, item_list);
-                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                        logs_remarks += execlog + Environment.NewLine;
                     }
                 }
                 //κείμενα
@@ -334,10 +589,68 @@ namespace MothercareImportData
                 tags = ExcelFileService.GetExcelData<TagRecord>(excelData, firstLineInUse);
                 if (tags.Count > 0)
                 {
-                    var softonetags_list = softoneService.GetSqlTags();
-                    logs_remarks = logs_remarks + $"Εισαγωγή Tags ({tags.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
-                    var execlog = softoneService.CreateTag(tags, item_list, softonetags_list);
-                    logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    //var softonetags_list = softoneService.GetSqlTags();
+                    //logs_remarks = logs_remarks + $"Εισαγωγή Tags ({tags.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    //var execlog = softoneService.CreateTag(tags, item_list, softonetags_list);
+                    //logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+
+                    var softOneTags = softoneService.GetSqlTags();
+                    var differences = new List<TagChange>();
+                    // Excel: Tag Code -> ItemCodes
+                    var excelGroups = tags.ToDictionary(x => x.Code, x => new HashSet<string>(x.Items?.Select(i => (i.ItemCode ?? "").Trim()) ?? new List<string>(), StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+                    // Database: Tag Code -> ItemCodes
+                    var dbGroups = softOneTags.ToDictionary(x => x.Code, x=> new HashSet<string>(x.Items?.Select(i => (i.ItemCode ?? "").Trim()) ?? new List<string>(),StringComparer.OrdinalIgnoreCase),StringComparer.OrdinalIgnoreCase);
+                    // Ελέγχουμε όλα τα Tags που υπάρχουν στο Excel
+                    foreach (var excelTag in tags)
+                    {
+                        string tagCode = (excelTag.Code ?? "").Trim();
+                        var excelItems = excelGroups[tagCode];
+                        HashSet<string> dbItems;
+                        if (!dbGroups.TryGetValue(tagCode, out dbItems))
+                        {
+                            dbItems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        }
+                        // INSERT: Υπάρχει στο Excel, αλλά όχι στη βάση
+                        foreach (var excelItem in excelTag.Items ?? new List<TagItems>())
+                        {
+                            string itemCode = (excelItem.ItemCode ?? "").Trim();
+                            if (!dbItems.Contains(itemCode))
+                            {
+                                differences.Add(new TagChange
+                                {
+                                    TagCode = tagCode,
+                                    ItemCode = itemCode,
+                                    Action = "INSERT"
+                                });
+                            }
+                        }
+                        // DELETE: Υπάρχει στη βάση, αλλά όχι στο Excel
+                        var dbTag = softOneTags.FirstOrDefault(x =>(x.Code ?? "").Trim().Equals(tagCode, StringComparison.OrdinalIgnoreCase));
+                        if (dbTag != null)
+                        {
+                            foreach (var dbItem in dbTag.Items ?? new List<TagItems>())
+                            {
+                                string itemCode = (dbItem.ItemCode ?? "").Trim();
+                                if (!excelItems.Contains(itemCode))
+                                {
+                                    differences.Add(new TagChange
+                                    {
+                                        TagCode = tagCode,
+                                        ItemCode = itemCode,
+                                        Action = "DELETE"
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    if (differences.Count > 0)
+                    {
+                        var countins = differences.Where(x => x.Action == "INSERT" && x.TagCode == "12085").ToList();
+                        var countdel = differences.Where(x => x.Action == "DELETE" && x.TagCode == "12085").ToList();
+                        logs_remarks = logs_remarks + $"Εισαγωγή Tags ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.SetTags(differences,tags, item_list);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
                 }
                 //nid
                 excelData = excelClient.ExportExcelData("nid");
@@ -376,6 +689,170 @@ namespace MothercareImportData
                         logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
                     }
                 }
+                //προτείνεται για
+                excelData = excelClient.ExportExcelData("προτείνεται για");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }//recommended for
+                recommendedfor = ExcelFileService.GetExcelData<RecommendedForRecord>(excelData, firstLineInUse);
+                if (recommendedfor.Count > 0)
+                {
+                    logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Προτείνεται Για ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    var softOneRecommendedFor = softoneService.GetRecommendedFor();
+
+                    var differences = new List<RecommendedForChange>();
+                    // Excel: ItemCode -> AttributeCodes
+                    var excelGroups = recommendedfor.GroupBy(x => x.ItemCode).ToDictionary(g => g.Key,g => new HashSet<string>(g.Select(x => x.AttributeCode)));
+                    // Database: ItemCode -> AttributeCodes
+                    var dbGroups = softOneRecommendedFor.GroupBy(x => x.ItemCode).ToDictionary(g => g.Key,g => new HashSet<string>(g.Select(x => x.AttributeCode)));
+                    // Ελέγχουμε όλα τα είδη που υπάρχουν στο Excel.
+                    foreach (var excelItem in excelGroups)
+                    {
+                        string itemCode = excelItem.Key;
+                        HashSet<string> excelAttributes = excelItem.Value;
+                        HashSet<string> dbAttributes;
+                        if (!dbGroups.TryGetValue(itemCode, out dbAttributes))
+                        {
+                            dbAttributes = new HashSet<string>();
+                        }
+                        // INSERT: Υπάρχει στο Excel, αλλά όχι στη βάση.
+                        foreach (string attributeCode in excelAttributes)
+                        {
+                            if (!dbAttributes.Contains(attributeCode))
+                            {
+                                differences.Add(new RecommendedForChange
+                                {
+                                    ItemCode = itemCode,
+                                    AttributeCode = attributeCode,
+                                    Action = "INSERT"
+                                });
+                            }
+                        }
+                        // DELETE: Υπάρχει στη βάση, αλλά όχι στο Excel.
+                        foreach (string attributeCode in dbAttributes)
+                        {
+                            if (!excelAttributes.Contains(attributeCode))
+                            {
+                                differences.Add(new RecommendedForChange
+                                {
+                                    ItemCode = itemCode,
+                                    AttributeCode = attributeCode,
+                                    Action = "DELETE"
+                                });
+                            }
+                        }
+                    }
+                    if (differences.Count > 0)
+                    {
+                        var softOneAttributes = softoneService.GetSqlAttributeData();
+                        logs_remarks = logs_remarks + $"Εισαγωγή Προτείνεται Για ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.SetRecommendedFor(differences, item_list, softOneAttributes);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //e-shop categories
+                excelData = excelClient.ExportExcelData("e-shop categories");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                categories = ExcelFileService.GetExcelData<CategoriesData>(excelData, firstLineInUse);
+                if (categories.Count > 0)
+                {
+                    logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Κατηγοριών ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    var softOneCategories = softoneService.GetSqlCategories();
+                    var differences = categories.Where(d => !softOneCategories.Any(s => 
+                    s.Ord1 == d.Ord1 && s.Category1Code == (string.IsNullOrWhiteSpace(d.Category1Code) ? "" : d.Category1Code) && s.Category1Description == (string.IsNullOrWhiteSpace(d.Category1Description) ? "" : d.Category1Description) && s.Category1DescriptionEn == (string.IsNullOrWhiteSpace(d.Category1DescriptionEn) ? "" : d.Category1DescriptionEn)
+                    && s.Ord2 == d.Ord2 && s.Category2Code == (string.IsNullOrWhiteSpace(d.Category2Code) ? "" : d.Category2Code) && s.Category2Description == (string.IsNullOrWhiteSpace(d.Category2Description) ? "" : d.Category2Description) && s.Category2DescriptionEn == (string.IsNullOrWhiteSpace(d.Category2DescriptionEn) ? "" : d.Category2DescriptionEn)
+                    && s.Ord3 == d.Ord3 && s.Category3Code == (string.IsNullOrWhiteSpace(d.Category3Code) ? "" : d.Category3Code) && s.Category3Description == (string.IsNullOrWhiteSpace(d.Category3Description) ? "" : d.Category3Description) && s.Category3DescriptionEn == (string.IsNullOrWhiteSpace(d.Category3DescriptionEn) ? "" : d.Category3DescriptionEn)
+                    && s.Ord4 == d.Ord4 && s.Category4Code == (string.IsNullOrWhiteSpace(d.Category4Code) ? "" : d.Category4Code) && s.Category4Description == (string.IsNullOrWhiteSpace(d.Category4Description) ? "" : d.Category4Description)&& s.Category4DescriptionEn == (string.IsNullOrWhiteSpace(d.Category4DescriptionEn) ? "" : d.Category4DescriptionEn)
+                    )).ToList();
+                    if (differences.Count > 0)
+                    {
+                        logs_remarks = logs_remarks + $"Εισαγωγή Αρχείου Κατηγοριών ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                        var execlog = softoneService.SetEshopCategories(differences);
+                        logs_remarks = logs_remarks + execlog + System.Environment.NewLine;
+                    }
+                }
+                //categories per product
+                excelData = excelClient.ExportExcelData("categories per product");
+                if (excelData.Count > 0)
+                {
+                    excelData.RemoveRange(0, numLinesToRemove);
+                }
+                categoriesPerProduct = ExcelFileService.GetExcelData<CategoriesPerProduct>(excelData, firstLineInUse);
+                if (categoriesPerProduct.Count > 0)
+                {
+                    logs_remarks = logs_remarks + $"Ανάγνωση Αρχείου Κατηγοριών Ανά Προϊόν ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;
+                    var softOneCategoriesPerProduct = softoneService.GetSqlCategoriesPerProduct();
+                    var differences = new List<CategoriesPerProductChange>();
+                    // Excel: ProductCode -> CategoryCode -> IsDefault
+                    var excelGroups = categoriesPerProduct.GroupBy(x => x.ProductCode).ToDictionary(g => g.Key,g => g.GroupBy(x => x.CategoryCode).ToDictionary(c => c.Key, c => c.First().IsDefault));
+                    // Database: ProductCode -> CategoryCode -> IsDefault
+                    var dbGroups = softOneCategoriesPerProduct.GroupBy(x => x.ProductCode).ToDictionary(g => g.Key,g => g.GroupBy(x => x.CategoryCode).ToDictionary(c => c.Key, c => c.First().IsDefault));
+
+                    // Ελέγχουμε όλα τα προϊόντα που υπάρχουν στο Excel.
+                    foreach (var excelItem in excelGroups)
+                    {
+                        string productCode = excelItem.Key;
+                        var excelCategories = excelItem.Value;
+                        Dictionary<string, int> dbCategories;
+                        if (!dbGroups.TryGetValue(productCode, out dbCategories))
+                        {
+                            dbCategories = new Dictionary<string, int>();
+                        }
+                        // INSERT ή UPDATE
+                        foreach (var excelCategory in excelCategories)
+                        {
+                            string categoryCode = excelCategory.Key;
+                            int isDefault = excelCategory.Value;
+                            if (!dbCategories.ContainsKey(categoryCode))
+                            {
+                                // INSERT
+                                differences.Add(new CategoriesPerProductChange
+                                {
+                                    ProductCode = productCode,
+                                    CategoryCode = categoryCode,
+                                    IsDefault = isDefault,
+                                    Action = "INSERT"
+                                });
+                            }
+                            else if (dbCategories[categoryCode] != isDefault)
+                            {
+                                // UPDATE
+                                differences.Add(new CategoriesPerProductChange
+                                {
+                                    ProductCode = productCode,
+                                    CategoryCode = categoryCode,
+                                    IsDefault = isDefault,
+                                    Action = "UPDATE"
+                                });
+                            }
+                        }
+                        // DELETE
+                        foreach (var dbCategory in dbCategories)
+                        {
+                            if (!excelCategories.ContainsKey(dbCategory.Key))
+                            {
+                                differences.Add(new CategoriesPerProductChange
+                                {
+                                    ProductCode = productCode,
+                                    CategoryCode = dbCategory.Key,
+                                    IsDefault = dbCategory.Value,
+                                    Action = "DELETE"
+                                });
+                            }
+                        }
+                    }
+                    if (differences.Count > 0)
+                    {
+                        var softOneCategories = softoneService.GetCodeIdCategories();
+                        logs_remarks += $"Ενημέρωση Κατηγοριών ανά Προϊόν ({differences.Count} εγγραφές) ({DateTime.Now:dd/MM/yyyy HH:mm:ss})"+ Environment.NewLine;
+                        var execlog = softoneService.SetCategoriesPerProduct(differences, item_list, softOneCategories);
+                        logs_remarks += execlog + Environment.NewLine;
+                    }
+                }                
                 if (logs_remarks != "")
                 {
                     logs_remarks = logs_remarks + $"Ολοκλήρωση Διαδικασίας ({DateTime.Now:dd/MM/yyyy HH:mm:ss})" + System.Environment.NewLine;

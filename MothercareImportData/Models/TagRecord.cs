@@ -20,4 +20,10 @@ namespace MothercareImportData.Models
     {
         public string ItemCode { get; set; }//AP_EIDH_CD
     }
+    public class TagChange
+    {
+        public string TagCode { get; set; }
+        public string ItemCode { get; set; }
+        public string Action { get; set; }
+    }
 }

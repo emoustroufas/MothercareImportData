@@ -46,4 +46,11 @@ namespace MothercareImportData.Models
         public int LanguageCode { get; set; }
         public string Description { get; set; }
     }
+    public class ProductAttributeDeleteRecord
+    {
+        public string ProductCode { get; set; }
+        public string AttributeCode { get; set; }
+        public int LanguageCode { get; set; }
+        public bool DeleteAttribute { get; set; }
+    }
 }

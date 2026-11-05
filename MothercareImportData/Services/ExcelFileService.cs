@@ -64,24 +64,24 @@ namespace MothercareImportData.Services
                         item.CommercialCollection = FileUtil.InBounds(33, row.Columns) ? (row.Columns.Count > 33 ? row.Columns[33] : "") : "";
                         item.Bu = FileUtil.InBounds(34, row.Columns) ? (row.Columns.Count > 34 ? row.Columns[34] : "") : "";
                         item.ItemType = Convert.ToInt32(FileUtil.InBounds(35, row.Columns) ? (row.Columns.Count > 35 ? (row.Columns[35] != "" ? row.Columns[35] : "0") : "0") : "0");
-                        item.AccountingType = FileUtil.InBounds(36, row.Columns) ? (row.Columns.Count > 36 ? row.Columns[36] : "") : "";
+                        //item.AccountingType = FileUtil.InBounds(36, row.Columns) ? (row.Columns.Count > 36 ? row.Columns[36] : "") : "";
                         //item.ImagePath = FileUtil.InBounds(37, row.Columns) ? (row.Columns.Count > 37 ? row.Columns[37] : "") : "";
-                        item.RestockWithPackage = Convert.ToInt32(FileUtil.InBounds(37, row.Columns) ? (row.Columns.Count > 37 ? (row.Columns[37] != "" ? row.Columns[37] : "0") : "0") : "0");
-                        item.WarrantyMonths = Convert.ToInt32(FileUtil.InBounds(38, row.Columns) ? (row.Columns.Count > 38 ? (row.Columns[38] != "" ? row.Columns[38] : "0") : "0") : "0");
-                        item.EshopMasterCode = FileUtil.InBounds(39, row.Columns) ? (row.Columns.Count > 39 ? row.Columns[39] : "") : "";
-                        item.Height = Convert.ToDouble(FileUtil.InBounds(40, row.Columns) ? (row.Columns.Count > 40 ? (row.Columns[40] != "" ? row.Columns[40] : "0.0") : "0.0") : "0.0");
-                        item.Length = Convert.ToDouble(FileUtil.InBounds(41, row.Columns) ? (row.Columns.Count > 41 ? (row.Columns[41] != "" ? row.Columns[41] : "0.0") : "0.0") : "0.0");
-                        item.Width = Convert.ToDouble(FileUtil.InBounds(42, row.Columns) ? (row.Columns.Count > 42 ? (row.Columns[42] != "" ? row.Columns[42] : "0.0") : "0.0") : "0.0");
-                        item.ItemCubeM = Convert.ToDouble(FileUtil.InBounds(43, row.Columns) ? (row.Columns.Count > 43 ? (row.Columns[43] != "" ? row.Columns[43] : "0.0") : "0.0") : "0.0");
-                        item.PhotoName = FileUtil.InBounds(44, row.Columns) ? (row.Columns.Count > 44 ? row.Columns[44] : "") : "";
-                        item.ExtendedCollection = Convert.ToInt32(FileUtil.InBounds(45, row.Columns) ? (row.Columns.Count > 45 ? row.Columns[45] : "0") : "0");
-                        item.WorkInProgressInGr = Convert.ToInt32(FileUtil.InBounds(46, row.Columns) ? (row.Columns.Count > 46 ? row.Columns[46] : "0") : "0");
-                        item.ToBePublishedInGr = Convert.ToInt32(FileUtil.InBounds(47, row.Columns) ? (row.Columns.Count > 47 ? row.Columns[47] : "0") : "0");
-                        //item.ToBeUnpublishedInGr = Convert.ToInt32(FileUtil.InBounds(48, row.Columns) ? (row.Columns.Count > 48 ? row.Columns[48] : "0") : "0");
-                        item.HasTranslation = Convert.ToInt32(FileUtil.InBounds(48, row.Columns) ? (row.Columns.Count > 48 ? row.Columns[48] : "0") : "0");
-                        item.IsPublishedInGr = Convert.ToInt32(FileUtil.InBounds(49, row.Columns) ? (row.Columns.Count > 49 ? row.Columns[49] : "0") : "0");
-                        item.ToBePublishedInSkroutz = Convert.ToInt32(FileUtil.InBounds(50, row.Columns) ? (row.Columns.Count > 50 ? row.Columns[50] : "0") : "0");
-                        item.ToBePublishedInPublic = Convert.ToInt32(FileUtil.InBounds(51, row.Columns) ? (row.Columns.Count > 51 ? row.Columns[51] : "0") : "0");
+                        item.RestockWithPackage = Convert.ToInt32(FileUtil.InBounds(36, row.Columns) ? (row.Columns.Count > 36 ? (row.Columns[36] != "" ? row.Columns[36] : "0") : "0") : "0");
+                        item.WarrantyMonths = Convert.ToInt32(FileUtil.InBounds(37, row.Columns) ? (row.Columns.Count > 37 ? (row.Columns[37] != "" ? row.Columns[37] : "0") : "0") : "0");
+                        item.EshopMasterCode = FileUtil.InBounds(38, row.Columns) ? (row.Columns.Count > 38 ? row.Columns[38] : "") : "";
+                        item.Height = Convert.ToDouble(FileUtil.InBounds(39, row.Columns) ? (row.Columns.Count > 39 ? (row.Columns[39] != "" ? row.Columns[39] : "0.0") : "0.0") : "0.0");
+                        item.Length = Convert.ToDouble(FileUtil.InBounds(40, row.Columns) ? (row.Columns.Count > 40 ? (row.Columns[40] != "" ? row.Columns[40] : "0.0") : "0.0") : "0.0");
+                        item.Width = Convert.ToDouble(FileUtil.InBounds(41, row.Columns) ? (row.Columns.Count > 41 ? (row.Columns[41] != "" ? row.Columns[41] : "0.0") : "0.0") : "0.0");
+                        item.ItemCubeM = Convert.ToDouble(FileUtil.InBounds(42, row.Columns) ? (row.Columns.Count > 42 ? (row.Columns[42] != "" ? row.Columns[42] : "0.0") : "0.0") : "0.0");
+                        item.PhotoName = FileUtil.InBounds(43, row.Columns) ? (row.Columns.Count > 43 ? row.Columns[43] : "") : "";
+                        item.ExtendedCollection = Convert.ToInt32(FileUtil.InBounds(44, row.Columns) ? (row.Columns.Count > 44 ? row.Columns[44] : "0") : "0");
+                        item.WorkInProgressInGr = Convert.ToInt32(FileUtil.InBounds(45, row.Columns) ? (row.Columns.Count > 45 ? row.Columns[45] : "0") : "0");
+                        item.ToBePublishedInGr = Convert.ToInt32(FileUtil.InBounds(46, row.Columns) ? (row.Columns.Count > 46 ? row.Columns[46] : "0") : "0");
+                        //item.ToBeUnpublishedInGr = Convert.ToInt32(FileUtil.InBounds(47, row.Columns) ? (row.Columns.Count > 47 ? row.Columns[47] : "0") : "0");
+                        item.HasTranslation = Convert.ToInt32(FileUtil.InBounds(47, row.Columns) ? (row.Columns.Count > 47 ? row.Columns[47] : "0") : "0");
+                        item.IsPublishedInGr = Convert.ToInt32(FileUtil.InBounds(48, row.Columns) ? (row.Columns.Count > 48 ? row.Columns[48] : "0") : "0");
+                        item.ToBePublishedInSkroutz = Convert.ToInt32(FileUtil.InBounds(49, row.Columns) ? (row.Columns.Count > 49 ? row.Columns[49] : "0") : "0");
+                        item.ToBePublishedInPublic = Convert.ToInt32(FileUtil.InBounds(50, row.Columns) ? (row.Columns.Count > 50 ? row.Columns[50] : "0") : "0");
                         result.Add((T)(object)item);
                     }
                     i++;
@@ -581,7 +581,7 @@ namespace MothercareImportData.Services
                 result.AddRange((IEnumerable<T>)nidRecords);
             }
             else if (typeof(T) == typeof(VatPerCountry))
-            { 
+            {
                 List<VatPerCountry> vatPerCountries = new List<VatPerCountry>();
                 foreach (var row in rows)
                 {
@@ -608,6 +608,64 @@ namespace MothercareImportData.Services
                     vatPerCountries.Add(vatPerCountry);
                 }
                 result.AddRange((IEnumerable<T>)vatPerCountries);
+            }
+            else if (typeof(T) == typeof(RecommendedForRecord))
+            { 
+                List<RecommendedForRecord> recommendedForRecords = new List<RecommendedForRecord>();
+                foreach (var row in rows)
+                {
+                    var itemCode = FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "") : "";
+                    var attributeCode = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+                    // Δημιουργούμε το RecommendedForRecord
+                    RecommendedForRecord recommendedForRecord = new RecommendedForRecord
+                    {
+                        ItemCode = itemCode,
+                        AttributeCode = attributeCode
+                    };
+                    recommendedForRecords.Add(recommendedForRecord);
+                }
+                result.AddRange((IEnumerable<T>)recommendedForRecords);
+            }
+            else if (typeof(T) == typeof(CategoriesData))
+            {
+                foreach (var row in rows)
+                {
+                    var category = new CategoriesData();
+                    if (row.Columns.Any())
+                    {
+                        category.Ord1 = FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? (row.Columns[0] != "" ? Convert.ToInt32(row.Columns[0]) : 0) : 0) : 0;
+                        category.Ord2 = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? (row.Columns[1] != "" ? Convert.ToInt32(row.Columns[1]) : 0) : 0) : 0;
+                        category.Ord3 = FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? (row.Columns[2] != "" ? Convert.ToInt32(row.Columns[2]) : 0) : 0) : 0;
+                        category.Ord4 = FileUtil.InBounds(3, row.Columns) ? (row.Columns.Count > 3 ? (row.Columns[3] != "" ? Convert.ToInt32(row.Columns[3]) : 0) : 0) : 0;
+                        category.Category1Code = FileUtil.InBounds(4, row.Columns) ? (row.Columns.Count > 4 ? row.Columns[4] : "") : "";
+                        category.Category1Description = FileUtil.InBounds(5, row.Columns) ? (row.Columns.Count > 5 ? row.Columns[5] : "") : "";
+                        category.Category1DescriptionEn = FileUtil.InBounds(6, row.Columns) ? (row.Columns.Count > 6 ? row.Columns[6] : "") : "";
+                        category.Category2Code = FileUtil.InBounds(7, row.Columns) ? (row.Columns.Count > 7 ? row.Columns[7] : "") : "";
+                        category.Category2Description = FileUtil.InBounds(8, row.Columns) ? (row.Columns.Count > 8 ? row.Columns[8] : "") : "";
+                        category.Category2DescriptionEn = FileUtil.InBounds(9, row.Columns) ? (row.Columns.Count > 9 ? row.Columns[9] : "") : "";
+                        category.Category3Code = FileUtil.InBounds(10, row.Columns) ? (row.Columns.Count > 10 ? row.Columns[10] : "") : "";
+                        category.Category3Description = FileUtil.InBounds(11, row.Columns) ? (row.Columns.Count > 11 ? row.Columns[11] : "") : "";
+                        category.Category3DescriptionEn = FileUtil.InBounds(12, row.Columns) ? (row.Columns.Count > 12 ? row.Columns[12] : "") : "";
+                        category.Category4Code = FileUtil.InBounds(13, row.Columns) ? (row.Columns.Count > 13 ? row.Columns[13] : "") : "";
+                        category.Category4Description = FileUtil.InBounds(14, row.Columns) ? (row.Columns.Count > 14 ? row.Columns[14] : "") : "";
+                        category.Category4DescriptionEn = FileUtil.InBounds(15, row.Columns) ? (row.Columns.Count > 15 ? row.Columns[15] : "") : "";
+                        result.Add((T)(object)category);
+                    }
+                }
+            }
+            else if (typeof(T) == typeof(CategoriesPerProduct))
+            {
+                foreach (var row in rows)
+                {
+                    var categoryPerProduct = new CategoriesPerProduct();
+                    if (row.Columns.Any())
+                    {
+                        categoryPerProduct.ProductCode = FileUtil.InBounds(0, row.Columns) ? (row.Columns.Count > 0 ? row.Columns[0] : "") : "";
+                        categoryPerProduct.CategoryCode = FileUtil.InBounds(1, row.Columns) ? (row.Columns.Count > 1 ? row.Columns[1] : "") : "";
+                        categoryPerProduct.IsDefault = Convert.ToInt32(FileUtil.InBounds(2, row.Columns) ? (row.Columns.Count > 2 ? (row.Columns[2] != "" ? row.Columns[2] : "0") : "0") : "0");
+                        result.Add((T)(object)categoryPerProduct);
+                    }
+                }
             }
             return result;
         }
